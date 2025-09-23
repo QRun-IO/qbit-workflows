@@ -140,6 +140,38 @@ public class StoreNewWorkflowRevisionProcess implements BackendStep, MetaDataPro
             throw (new QUserFacingException("Workflow not found by id: " + workflowId));
          }
 
+         String stepsJSON = runBackendStepInput.getValueString("steps");
+         if(!StringUtils.hasContent(stepsJSON))
+         {
+            throw (new QUserFacingException("Workflow steps input was not provided."));
+         }
+
+         List<WorkflowStep> workflowSteps;
+         try
+         {
+            workflowSteps = JsonUtils.toObject(stepsJSON, new TypeReference<>() {});
+         }
+         catch(Exception e)
+         {
+            throw (new QUserFacingException("Error parsing workflow steps json: " + e.getMessage(), e));
+         }
+
+         String linksJSON = runBackendStepInput.getValueString("links");
+         if(!StringUtils.hasContent(linksJSON))
+         {
+            throw (new QUserFacingException("Workflow links input was not provided."));
+         }
+
+         List<WorkflowLink> workflowLinks;
+         try
+         {
+            workflowLinks = JsonUtils.toObject(linksJSON, new TypeReference<>() {});
+         }
+         catch(Exception e)
+         {
+            throw (new QUserFacingException("Error parsing workflow links json: " + e.getMessage(), e));
+         }
+
          ////////////////////////////
          // look up next versionNo //
          ////////////////////////////
@@ -166,15 +198,15 @@ public class StoreNewWorkflowRevisionProcess implements BackendStep, MetaDataPro
          // insert the workflow revision //
          //////////////////////////////////
          String           commitMessage    = runBackendStepInput.getValueString("commitMessage");
+         String           userName         = ObjectUtils.tryElse(() -> QContext.getQSession().getUser().getFullName(), "Unknown");
          WorkflowRevision workflowRevision = new WorkflowRevision();
          workflowRevision.setWorkflowId(workflowId);
          workflowRevision.setVersionNo(versionNo);
-         workflowRevision.setCommitMessage(StringUtils.hasContent(commitMessage) ? commitMessage : "New workflow revision created by  " + QContext.getQSession().getUser().getFullName());
+         workflowRevision.setCommitMessage(StringUtils.hasContent(commitMessage) ? commitMessage : "New workflow revision created by  " + userName);
          workflowRevision.setApiName(runBackendStepInput.getValueString("apiName"));
          workflowRevision.setApiVersion(runBackendStepInput.getValueString("apiVersion"));
-         workflowRevision.setAuthor(ObjectUtils.tryElse(() -> QContext.getQSession().getUser().getFullName(), "Unknown"));
+         workflowRevision.setAuthor(userName);
 
-         List<WorkflowStep> workflowSteps = JsonUtils.toObject(runBackendStepInput.getValueString("steps"), new TypeReference<>() {});
          if(!workflowSteps.isEmpty())
          {
             workflowRevision.setStartStepNo(workflowSteps.get(0).getStepNo());
@@ -208,19 +240,24 @@ public class StoreNewWorkflowRevisionProcess implements BackendStep, MetaDataPro
          //////////////////////////////////////////////////////////////////////////////////////////////
          // store steps (first setting revision id, validating, and putting a fresh summary on each) //
          //////////////////////////////////////////////////////////////////////////////////////////////
-         List<String> errors = new ArrayList<>();
+         List<String> errors            = new ArrayList<>();
+         List<String> errorsForThisStep = new ArrayList<>();
          workflowSteps.forEach(step ->
          {
             try
             {
                step.setWorkflowRevisionId(insertedRevisionId);
 
-               WorkflowStepType          workflowStepType = WorkflowsRegistry.of(QContext.getQInstance()).getWorkflowStepType(step.getWorkflowStepTypeName());
-               Map<String, Serializable> inputValues      = ValueUtils.getValueAsMap(step.getInputValuesJson());
+               WorkflowStepType workflowStepType = WorkflowsRegistry.of(QContext.getQInstance()).getWorkflowStepType(step.getWorkflowStepTypeName());
+               if(workflowStepType == null)
+               {
+                  throw (new QUserFacingException("Unknown workflow step type " + step.getWorkflowStepTypeName()));
+               }
 
                ////////////////////////////////////
                // summary - if it fails, :shrug: //
                ////////////////////////////////////
+               Map<String, Serializable> inputValues = ValueUtils.getValueAsMap(step.getInputValuesJson());
                try
                {
                   step.setSummary(workflowStepType.getDynamicStepSummary(workflowId, inputValues));
@@ -237,18 +274,27 @@ public class StoreNewWorkflowRevisionProcess implements BackendStep, MetaDataPro
                if(validatorCodeReference != null)
                {
                   WorkflowStepValidatorInterface validator = QCodeLoader.getAdHoc(WorkflowStepValidatorInterface.class, validatorCodeReference);
-                  validator.validate(step, inputValues, workflowRevisionRecord, workflowRecord, errors);
+                  validator.validate(step, inputValues, workflowRevisionRecord, workflowRecord, errorsForThisStep);
+                  if(!errorsForThisStep.isEmpty())
+                  {
+                     ///////////////////////////////////////
+                     // put Step # in front of all errors //
+                     ///////////////////////////////////////
+                     errors.addAll(errorsForThisStep.stream().map(e -> "Step " + step.getStepNo() + ": " + e).toList());
+                     errorsForThisStep.clear();
+                  }
                }
             }
             catch(Exception e)
             {
-               errors.add("Error processing step [" + step.getSummary() + "]: " + e.getMessage());
+               errors.add("Error processing Step " + step.getStepNo() + ": " + e.getMessage());
             }
          });
 
          if(!errors.isEmpty())
          {
-            throw (new QUserFacingException("Validation errors in steps: " + StringUtils.joinWithCommasAndAnd(errors)));
+            String message = errors.size() + " validation error" + StringUtils.plural(errors) + " occurred within the workflow's steps:\n" + StringUtils.join("\n", errors);
+            throw (new QUserFacingException(message));
          }
 
          new InsertAction().execute(new InsertInput(WorkflowStep.TABLE_NAME).withRecordEntities(workflowSteps).withTransaction(transaction));
@@ -256,7 +302,6 @@ public class StoreNewWorkflowRevisionProcess implements BackendStep, MetaDataPro
          /////////////////
          // store links //
          /////////////////
-         List<WorkflowLink> workflowLinks = JsonUtils.toObject(runBackendStepInput.getValueString("links"), new TypeReference<>() {});
          workflowLinks.forEach(link -> link.setWorkflowRevisionId(insertedRevisionId));
          new InsertAction().execute(new InsertInput(WorkflowLink.TABLE_NAME).withRecordEntities(workflowLinks).withTransaction(transaction));
 
