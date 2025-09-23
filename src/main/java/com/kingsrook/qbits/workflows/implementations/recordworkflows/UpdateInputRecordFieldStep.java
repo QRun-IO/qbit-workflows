@@ -60,7 +60,10 @@ import org.json.JSONObject;
 
 
 /*******************************************************************************
- ** workflow step that updates a record with one value in one field
+ * Workflow step that updates a record with one value in one field
+ *
+ * This class includes some public static methods that can be useful for other
+ * workflow step implementations that have similar functionality.
  *******************************************************************************/
 public class UpdateInputRecordFieldStep extends WorkflowStepType implements WorkflowStepExecutorInterface, WorkflowStepValidatorInterface
 {
@@ -101,7 +104,15 @@ public class UpdateInputRecordFieldStep extends WorkflowStepType implements Work
 
 
    /***************************************************************************
-    **
+    * For a given fieldName, tableName, and api and version (which come from a
+    * workflowRevision), get QFieldMetaData for that field (if it's in that
+    * API Version).
+    *
+    * @param fieldNameMaybeWithTableNamePrefix - field name - which can be
+    * prefixed by tableName + "."
+    * @param tableName table name
+    * @param workflowRevision from which api name and version will come
+    * @return optional containing QFieldMetaData if found, or empty if not.
     ***************************************************************************/
    public static Optional<QFieldMetaData> getApiField(String fieldNameMaybeWithTableNamePrefix, String tableName, WorkflowRevision workflowRevision) throws QException
    {
@@ -122,6 +133,31 @@ public class UpdateInputRecordFieldStep extends WorkflowStepType implements Work
    @Override
    public String getDynamicStepSummary(Integer workflowId, Map<String, Serializable> inputValues) throws QException
    {
+      QRecord workflowRecord = GetAction.execute(Workflow.TABLE_NAME, workflowId);
+      String  tableName      = workflowRecord.getValueString("tableName");
+      return getStepSummary(inputValues, tableName, false);
+   }
+
+
+
+   /***************************************************************************
+    * Helper for {@link #getDynamicStepSummary(Integer, Map)} or
+    * {@link #execute(WorkflowStep, Map, WorkflowExecutionContext)} to generate
+    * a string like "${fieldLabel} will be / was set to ${value}" or "... cleared out"
+    * where the value will be a translated possible value if applicable.
+    *
+    * @param inputValues map of values user assigned to the step.  expected to
+    *                    include String fieldName and String value.
+    * @param tableName table that the field should come from.  Many times this
+    *                  may be the tableName on the workflow - but it could be
+    *                  a hard-coded tableName in other implementations of this
+    *                  step type.
+    * @param isPastTense to format the message as "will be" or "was".  e.g.,
+    *                    for getDynamicStepSummary would be false ("will be")
+    *                    and for execute would be true ("was").
+    ***************************************************************************/
+   public static String getStepSummary(Map<String, Serializable> inputValues, String tableName, boolean isPastTense)
+   {
       String fieldName = ValueUtils.getValueAsString(inputValues.get("fieldName"));
       String value     = ValueUtils.getValueAsString(inputValues.get("value"));
 
@@ -137,44 +173,37 @@ public class UpdateInputRecordFieldStep extends WorkflowStepType implements Work
          }
       }
 
-      return getStepSummary(workflowId, fieldName, apiName, apiVersion, value, false);
+      return getStepSummary(fieldName, tableName, apiName, apiVersion, value, isPastTense);
    }
 
 
 
    /***************************************************************************
-    **
+    *
     ***************************************************************************/
-   private String getStepSummary(Integer workflowId, String fieldName, String apiName, String apiVersion, String value, boolean isPastTense)
+   private static String getStepSummary(String fieldName, String tableName, String apiName, String apiVersion, String value, boolean isPastTense)
    {
       String         fieldLabel = null;
-      QTableMetaData table      = null;
+      QTableMetaData table      = QContext.getQInstance().getTable(tableName);
 
       if(StringUtils.hasContent(fieldName))
       {
          try
          {
-            if(workflowId != null)
+            WorkflowRevision workflowRevision = new WorkflowRevision().withApiName(apiName).withApiVersion(apiVersion);
+            if(WorkflowStepUtils.useApi(workflowRevision))
             {
-               QRecord workflowRecord = GetAction.execute(Workflow.TABLE_NAME, workflowId);
-               table = QContext.getQInstance().getTable(workflowRecord.getValueString("tableName"));
-
-               WorkflowRevision workflowRevision = new WorkflowRevision().withApiName(apiName).withApiVersion(apiVersion);
-               if(WorkflowStepUtils.useApi(workflowRevision))
+               Optional<QFieldMetaData> optionalApiField = getApiField(fieldName, tableName, workflowRevision);
+               if(optionalApiField.isPresent())
                {
-                  Optional<QFieldMetaData> optionalApiField = getApiField(fieldName, table.getName(), workflowRevision);
-                  if(optionalApiField.isPresent())
-                  {
-                     // fieldName = optionalApiField.field().getName(); // hmm?
-                     fieldLabel = optionalApiField.get().getLabel();
-                  }
+                  fieldLabel = optionalApiField.get().getLabel();
                }
-               else
-               {
-                  FieldAndJoinTable fieldAndJoinTable = FieldAndJoinTable.get(table, fieldName);
-                  fieldName = fieldAndJoinTable.field().getName();
-                  fieldLabel = fieldAndJoinTable.field().getLabel();
-               }
+            }
+            else
+            {
+               FieldAndJoinTable fieldAndJoinTable = FieldAndJoinTable.get(table, fieldName);
+               fieldName = fieldAndJoinTable.field().getName();
+               fieldLabel = fieldAndJoinTable.field().getLabel();
             }
          }
          catch(Exception e)
@@ -183,15 +212,22 @@ public class UpdateInputRecordFieldStep extends WorkflowStepType implements Work
          }
       }
 
-      String verb = isPastTense ? "was" : "will be";
-
       if(StringUtils.hasContent(fieldLabel))
       {
+         String verb = isPastTense ? "was" : "will be";
          if(StringUtils.hasContent(value))
          {
             String displayValue = value;
             try
             {
+               ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+               // field names from this PVS are always table.field - but QValueFormatter doesn't expect that - so strip away table. //
+               ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+               if(fieldName != null && fieldName.startsWith(tableName + "."))
+               {
+                  fieldName = fieldName.replace(tableName + ".", "");
+               }
+
                QRecord record = new QRecord().withValue(fieldName, value);
                QValueFormatter.setDisplayValuesInRecordsIncludingPossibleValueTranslations(table, List.of(record));
                displayValue = record.getDisplayValue(fieldName);
@@ -241,7 +277,8 @@ public class UpdateInputRecordFieldStep extends WorkflowStepType implements Work
 
       context.doesRecordNeedUpdated.set(true);
 
-      String stepSummary = getStepSummary(context.getWorkflow().getId(), fieldName, context.getWorkflowRevision().getApiName(), context.getWorkflowRevision().getApiVersion(), value, true);
+      String tableName   = context.getWorkflow().getTableName();
+      String stepSummary = getStepSummary(fieldName, tableName, context.getWorkflowRevision().getApiName(), context.getWorkflowRevision().getApiVersion(), value, true);
       return new WorkflowStepOutput(value, stepSummary);
    }
 
@@ -284,12 +321,34 @@ public class UpdateInputRecordFieldStep extends WorkflowStepType implements Work
    @Override
    public void validate(WorkflowStep step, Map<String, Serializable> inputValues, QRecord workflowRevision, QRecord workflow, List<String> errors) throws QException
    {
-      if(WorkflowStepUtils.useApi(new WorkflowRevision(workflowRevision)))
+      validate(workflow.getValueString("tableName"), inputValues, workflowRevision, errors);
+   }
+
+
+
+   /***************************************************************************
+    * implementation logic for {@link #validate(WorkflowStep, Map, QRecord, QRecord, List)}.
+    * makes sure that, if the workflow uses API, that the field is a valid field
+    * for the api version being used in the workflow revision.
+    *
+    * @param tableName table that the field should come from.  Many times this
+    *                  may be the tableName on the workflow - but it could be
+    *                  a hard-coded tableName in other implementations of this
+    *                  step type.
+    * @param inputValues map of values user assigned to the step.  expected to
+    *                    include String fieldName.
+    * @param workflowRevision from which api name and version will come
+    * @param errors Out param - list of error message strings, which will be
+    *               added to if the input fieldName isn't in the table for the
+    *               api version on the workflowRevision
+    ***************************************************************************/
+   public static void validate(String tableName, Map<String, Serializable> inputValues, QRecord workflowRevision, List<String> errors) throws QException
+   {
+      if(workflowRevision != null && WorkflowStepUtils.useApi(new WorkflowRevision(workflowRevision)))
       {
          String fieldName  = ValueUtils.getValueAsString(inputValues.get("fieldName"));
          String apiName    = ValueUtils.getValueAsString(workflowRevision.getValueString("apiName"));
          String apiVersion = ValueUtils.getValueAsString(workflowRevision.getValueString("apiVersion"));
-         String tableName  = ValueUtils.getValueAsString(workflow.getValueString("tableName"));
 
          Optional<QFieldMetaData> optionalApiField = getApiField(fieldName, tableName, new WorkflowRevision(workflowRevision));
          if(optionalApiField.isEmpty())
