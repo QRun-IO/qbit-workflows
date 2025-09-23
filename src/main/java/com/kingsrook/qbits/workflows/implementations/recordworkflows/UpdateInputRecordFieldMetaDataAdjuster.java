@@ -25,6 +25,7 @@ package com.kingsrook.qbits.workflows.implementations.recordworkflows;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -35,6 +36,8 @@ import com.kingsrook.qqq.backend.core.actions.values.SearchPossibleValueSourceAc
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.logging.QLogger;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.values.SearchPossibleValueSourceInput;
 import com.kingsrook.qqq.backend.core.model.actions.values.SearchPossibleValueSourceOutput;
 import com.kingsrook.qqq.backend.core.model.metadata.code.InitializableViaCodeReference;
@@ -143,6 +146,8 @@ public class UpdateInputRecordFieldMetaDataAdjuster implements FormAdjusterInter
          }
       }
 
+      adjustPossibleValueSourceFilterCriteriaInputs(updatedField.getPossibleValueSourceFilter());
+
       ///////////////////////////////////////////////////////////////////////////////////
       // build the output object, starting with the new meta-data of the 'value' field //
       ///////////////////////////////////////////////////////////////////////////////////
@@ -182,6 +187,43 @@ public class UpdateInputRecordFieldMetaDataAdjuster implements FormAdjusterInter
       }
 
       return output;
+   }
+
+
+
+   /***************************************************************************
+    * if the field has a possible-value-source filter on it, and that filter
+    * uses an input field e.g., ${input.someField} - consider that this value
+    * *might* be an attribute on the workflow so add an optional
+    * ??${input.workflow.someField} after it.
+    ***************************************************************************/
+   static void adjustPossibleValueSourceFilterCriteriaInputs(QQueryFilter filter)
+   {
+      if(filter == null)
+      {
+         return;
+      }
+
+      for(QFilterCriteria criteria : CollectionUtils.nonNullList(filter.getCriteria()))
+      {
+         List<Serializable>         values        = CollectionUtils.nonNullList(criteria.getValues());
+         ListIterator<Serializable> valueIterator = values.listIterator();
+         while(valueIterator.hasNext())
+         {
+            Serializable value = valueIterator.next();
+            if(value instanceof String stringValue && stringValue.startsWith("${input."))
+            {
+               String inputFieldName = stringValue.replace("${input.", "").replace("}", "");
+               String updatedValue   = stringValue + "??${input.workflow." + inputFieldName + "}";
+               valueIterator.set(updatedValue);
+            }
+         }
+      }
+
+      for(QQueryFilter subFilter : CollectionUtils.nonNullList(filter.getSubFilters()))
+      {
+         adjustPossibleValueSourceFilterCriteriaInputs(subFilter);
+      }
    }
 
 
