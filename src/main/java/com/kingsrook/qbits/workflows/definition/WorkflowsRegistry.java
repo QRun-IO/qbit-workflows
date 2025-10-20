@@ -203,6 +203,8 @@ public class WorkflowsRegistry implements QSupplementalInstanceMetaData, QHelpCo
    /***************************************************************************
     * plug in to the QQQ Help Content system, to allow help content to set
     * descriptions and labels for workflow steps.
+    *
+    * Note:  helpContent can come in here as null, if it has been, e.g., deleted!
     ***************************************************************************/
    @Override
    public void acceptHelpContent(QInstance qInstance, QHelpContent helpContent, Map<String, String> nameValuePairs)
@@ -215,11 +217,18 @@ public class WorkflowsRegistry implements QSupplementalInstanceMetaData, QHelpCo
          {
             if("description".equals(nameValuePairs.get("slot")))
             {
-               workflowStepType.setDescription(helpContent.getContentAsHtml());
+               workflowStepType.setDescription(helpContent == null ? null : helpContent.getContentAsHtml());
             }
             else if("label".equals(nameValuePairs.get("slot")))
             {
-               workflowStepType.setLabel(helpContent.getContent());
+               if(helpContent != null)
+               {
+                  workflowStepType.setLabel(helpContent.getContent());
+               }
+               else
+               {
+                  LOG.info("Not removing workflow step type label after deleted help content (original label is not known...", logPair("name", workflowStepTypeName));
+               }
             }
             else if(nameValuePairs.containsKey("field"))
             {
@@ -229,8 +238,9 @@ public class WorkflowsRegistry implements QSupplementalInstanceMetaData, QHelpCo
                      .withType(QFieldType.STRING)
                      .withLabel("Step Description")
                      .withName("qswdDescription")
-                     .withHelpContent(helpContent)
                      .withGridColumns(12);
+
+                  newField.setHelpContents(helpContent == null ? null : ListBuilder.of(helpContent));
 
                   List<QFieldMetaData> existingFields = workflowStepType.getInputFields();
                   existingFields.add(newField);
@@ -242,7 +252,7 @@ public class WorkflowsRegistry implements QSupplementalInstanceMetaData, QHelpCo
                   {
                      if(nameValuePairs.get("field").equals(fieldMetaData.getName()))
                      {
-                        fieldMetaData.setHelpContents(ListBuilder.of(helpContent));
+                        fieldMetaData.setHelpContents(helpContent == null ? null : ListBuilder.of(helpContent));
                      }
                   }
                }
