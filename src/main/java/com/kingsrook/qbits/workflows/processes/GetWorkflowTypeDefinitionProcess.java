@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.kingsrook.qbits.workflows.definition.WorkflowStepType;
 import com.kingsrook.qbits.workflows.definition.WorkflowStepTypeCategory;
@@ -36,11 +37,16 @@ import com.kingsrook.qbits.workflows.definition.WorkflowsRegistry;
 import com.kingsrook.qbits.workflows.model.Workflow;
 import com.kingsrook.qqq.backend.core.actions.processes.BackendStep;
 import com.kingsrook.qqq.backend.core.actions.tables.GetAction;
+import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.actions.processes.RunBackendStepInput;
 import com.kingsrook.qqq.backend.core.model.actions.processes.RunBackendStepOutput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
+import com.kingsrook.qqq.backend.core.model.helpcontent.HelpContent;
 import com.kingsrook.qqq.backend.core.model.metadata.MetaDataProducerInterface;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
@@ -118,6 +124,26 @@ public class GetWorkflowTypeDefinitionProcess implements BackendStep, MetaDataPr
 
          workflowType = workflowType.customizeBasedOnWorkflow(workflowRecord);
 
+         /////////////////////////////////////////////////////////
+         // look for any 'top level' help content for workflows //
+         /////////////////////////////////////////////////////////
+         QQueryFilter      filter       = new QQueryFilter(new QFilterCriteria("key", QCriteriaOperator.STARTS_WITH, "workflow:"));
+         List<HelpContent> helpContents = QueryAction.execute(HelpContent.TABLE_NAME, HelpContent.class, filter);
+
+         /////////////////////////////////////////////////////
+         // add these helps to the workflow type if present //
+         /////////////////////////////////////////////////////
+         if(CollectionUtils.nullSafeHasContents(helpContents))
+         {
+            Map<String, HelpContent>       helpContentMap          = helpContents.stream().collect(Collectors.toMap(h -> h.getKey(), h -> h));
+            Map<String, List<HelpContent>> workflowTypeHelpContent = getWorkflowTypeHelpContent(helpContentMap);
+            workflowType.setHelpContent(workflowTypeHelpContent);
+
+            ///////////////////////////////////////////
+            // reregister with the workflow registry //
+            ///////////////////////////////////////////
+            WorkflowsRegistry.of(QContext.getQInstance()).registerWorkflowType(workflowType);
+         }
          runBackendStepOutput.addValue("workflowType", workflowType);
 
          ////////////////////////////////////////////////////////////////////////////////
@@ -165,6 +191,26 @@ public class GetWorkflowTypeDefinitionProcess implements BackendStep, MetaDataPr
       {
          throw new QException("Error getting workflow type definition", e);
       }
+   }
+
+
+
+   /***************************************************************************
+    **
+    ***************************************************************************/
+   protected Map<String, List<HelpContent>> getWorkflowTypeHelpContent(Map<String, HelpContent> helpContentMap)
+   {
+      Map<String, List<HelpContent>> workflowTypeHelpContent = new LinkedHashMap<>();
+
+      String[] workflowTypeKeys = new String[] { "workflow:editor;field:workflowName", "workflow:editor;field:versionNo", "workflow:editor;field:apiName", "workflow:editor;field:apiVersion", "workflow:tester;field:workflowTestScenarioId" };
+      for(String key : workflowTypeKeys)
+      {
+         if(helpContentMap.containsKey(key))
+         {
+            workflowTypeHelpContent.put(key, List.of(helpContentMap.get(key)));
+         }
+      }
+      return (workflowTypeHelpContent);
    }
 
 }

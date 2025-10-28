@@ -25,6 +25,7 @@ package com.kingsrook.qbits.workflows.definition;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import com.google.gson.reflect.TypeToken;
@@ -33,6 +34,7 @@ import com.kingsrook.qbits.workflows.execution.WorkflowTypeTesterInterface;
 import com.kingsrook.qqq.backend.core.instances.QInstanceEnricher;
 import com.kingsrook.qqq.backend.core.instances.QInstanceValidator;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
+import com.kingsrook.qqq.backend.core.model.helpcontent.HelpContent;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import com.kingsrook.qqq.backend.core.utils.CollectionUtils;
@@ -52,7 +54,8 @@ public class WorkflowType implements Serializable
    private QCodeReference executor;
    private QCodeReference tester;
 
-   private ArrayList<WorkflowStepTypeCategory> stepTypeCategories;
+   protected Map<String, List<HelpContent>>      helpContent;
+   private   ArrayList<WorkflowStepTypeCategory> stepTypeCategories;
 
 
 
@@ -266,6 +269,8 @@ public class WorkflowType implements Serializable
       return Collections.emptyMap();
    }
 
+
+
    /*******************************************************************************
     * Getter for tester
     * @see #withTester(QCodeReference)
@@ -302,5 +307,55 @@ public class WorkflowType implements Serializable
       return (this);
    }
 
+
+
+   /*******************************************************************************
+    ** Getter for helpContent
+    *******************************************************************************/
+   public Map<String, List<HelpContent>> getHelpContent()
+   {
+      return (this.helpContent);
+   }
+
+
+
+   /*******************************************************************************
+    ** Setter for helpContent
+    *******************************************************************************/
+   public void setHelpContent(Map<String, List<HelpContent>> helpContent)
+   {
+      this.helpContent = helpContent;
+   }
+
+
+
+   /*******************************************************************************
+    ** Fluent setter for helpContent
+    *******************************************************************************/
+   public WorkflowType withHelpContent(Map<String, List<HelpContent>> helpContent)
+   {
+      this.helpContent = helpContent;
+      return (this);
+   }
+
+
+
+   /*******************************************************************************
+    ** Fluent setter for helpContent
+    *******************************************************************************/
+   public WorkflowType withHelpContent(String key, HelpContent helpContent)
+   {
+      if(this.helpContent == null)
+      {
+         this.helpContent = new HashMap<>();
+      }
+      if(!this.helpContent.containsKey(key))
+      {
+         this.helpContent.put(key, new ArrayList<>());
+      }
+
+      this.helpContent.get(key).add(helpContent);
+      return (this);
+   }
 
 }
