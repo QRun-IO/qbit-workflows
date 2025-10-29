@@ -34,9 +34,9 @@ import com.kingsrook.qbits.workflows.execution.WorkflowTypeTesterInterface;
 import com.kingsrook.qqq.backend.core.instances.QInstanceEnricher;
 import com.kingsrook.qqq.backend.core.instances.QInstanceValidator;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
-import com.kingsrook.qqq.backend.core.model.helpcontent.HelpContent;
 import com.kingsrook.qqq.backend.core.model.metadata.QInstance;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
+import com.kingsrook.qqq.backend.core.model.metadata.help.QHelpContent;
 import com.kingsrook.qqq.backend.core.utils.CollectionUtils;
 import com.kingsrook.qqq.backend.core.utils.StringUtils;
 
@@ -54,7 +54,7 @@ public class WorkflowType implements Serializable
    private QCodeReference executor;
    private QCodeReference tester;
 
-   protected Map<String, List<HelpContent>>      helpContent;
+   protected Map<String, List<QHelpContent>>     helpContent;
    private   ArrayList<WorkflowStepTypeCategory> stepTypeCategories;
 
 
@@ -312,7 +312,7 @@ public class WorkflowType implements Serializable
    /*******************************************************************************
     ** Getter for helpContent
     *******************************************************************************/
-   public Map<String, List<HelpContent>> getHelpContent()
+   public Map<String, List<QHelpContent>> getHelpContent()
    {
       return (this.helpContent);
    }
@@ -322,7 +322,7 @@ public class WorkflowType implements Serializable
    /*******************************************************************************
     ** Setter for helpContent
     *******************************************************************************/
-   public void setHelpContent(Map<String, List<HelpContent>> helpContent)
+   public void setHelpContent(Map<String, List<QHelpContent>> helpContent)
    {
       this.helpContent = helpContent;
    }
@@ -332,7 +332,7 @@ public class WorkflowType implements Serializable
    /*******************************************************************************
     ** Fluent setter for helpContent
     *******************************************************************************/
-   public WorkflowType withHelpContent(Map<String, List<HelpContent>> helpContent)
+   public WorkflowType withHelpContent(Map<String, List<QHelpContent>> helpContent)
    {
       this.helpContent = helpContent;
       return (this);
@@ -343,7 +343,7 @@ public class WorkflowType implements Serializable
    /*******************************************************************************
     ** Fluent setter for helpContent
     *******************************************************************************/
-   public WorkflowType withHelpContent(String key, HelpContent helpContent)
+   public WorkflowType withHelpContent(String key, QHelpContent helpContent)
    {
       if(this.helpContent == null)
       {

@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.kingsrook.qbits.workflows.definition.WorkflowStepType;
 import com.kingsrook.qbits.workflows.definition.WorkflowStepTypeCategory;
@@ -37,14 +36,10 @@ import com.kingsrook.qbits.workflows.definition.WorkflowsRegistry;
 import com.kingsrook.qbits.workflows.model.Workflow;
 import com.kingsrook.qqq.backend.core.actions.processes.BackendStep;
 import com.kingsrook.qqq.backend.core.actions.tables.GetAction;
-import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.actions.processes.RunBackendStepInput;
 import com.kingsrook.qqq.backend.core.model.actions.processes.RunBackendStepOutput;
-import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
-import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
-import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.helpcontent.HelpContent;
 import com.kingsrook.qqq.backend.core.model.metadata.MetaDataProducerInterface;
@@ -53,6 +48,7 @@ import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType;
 import com.kingsrook.qqq.backend.core.model.metadata.frontend.QFrontendFieldMetaData;
+import com.kingsrook.qqq.backend.core.model.metadata.help.QHelpContent;
 import com.kingsrook.qqq.backend.core.model.metadata.permissions.PermissionLevel;
 import com.kingsrook.qqq.backend.core.model.metadata.permissions.QPermissionRules;
 import com.kingsrook.qqq.backend.core.model.metadata.processes.QBackendStepMetaData;
@@ -122,28 +118,12 @@ public class GetWorkflowTypeDefinitionProcess implements BackendStep, MetaDataPr
             throw new QException("Workflow type not found: " + workflowTypeName);
          }
 
+         ////////////////////////////////////////////////////////////////////////////////
+         // save any help content on current workflow and put back after customization //
+         ////////////////////////////////////////////////////////////////////////////////
+         Map<String, List<QHelpContent>> helpContent = workflowType.getHelpContent();
          workflowType = workflowType.customizeBasedOnWorkflow(workflowRecord);
-
-         /////////////////////////////////////////////////////////
-         // look for any 'top level' help content for workflows //
-         /////////////////////////////////////////////////////////
-         QQueryFilter      filter       = new QQueryFilter(new QFilterCriteria("key", QCriteriaOperator.STARTS_WITH, "workflow:"));
-         List<HelpContent> helpContents = QueryAction.execute(HelpContent.TABLE_NAME, HelpContent.class, filter);
-
-         /////////////////////////////////////////////////////
-         // add these helps to the workflow type if present //
-         /////////////////////////////////////////////////////
-         if(CollectionUtils.nullSafeHasContents(helpContents))
-         {
-            Map<String, HelpContent>       helpContentMap          = helpContents.stream().collect(Collectors.toMap(h -> h.getKey(), h -> h));
-            Map<String, List<HelpContent>> workflowTypeHelpContent = getWorkflowTypeHelpContent(helpContentMap);
-            workflowType.setHelpContent(workflowTypeHelpContent);
-
-            ///////////////////////////////////////////
-            // reregister with the workflow registry //
-            ///////////////////////////////////////////
-            WorkflowsRegistry.of(QContext.getQInstance()).registerWorkflowType(workflowType);
-         }
+         workflowType.setHelpContent(helpContent);
          runBackendStepOutput.addValue("workflowType", workflowType);
 
          ////////////////////////////////////////////////////////////////////////////////

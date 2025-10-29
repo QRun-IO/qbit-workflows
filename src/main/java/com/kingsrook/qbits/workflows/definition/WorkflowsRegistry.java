@@ -259,6 +259,17 @@ public class WorkflowsRegistry implements QSupplementalInstanceMetaData, QHelpCo
             }
          }
       }
+      else if(nameValuePairs.containsKey("workflow") && nameValuePairs.containsKey("field"))
+      {
+         if(workflowTypes != null)
+         {
+            for(String workflowTypeName : workflowTypes.keySet())
+            {
+               String key = "workflow:" + nameValuePairs.get("workflow") + ";field:" + nameValuePairs.get("field");
+               workflowTypes.get(workflowTypeName).withHelpContent(key, helpContent);
+            }
+         }
+      }
    }
 
 }

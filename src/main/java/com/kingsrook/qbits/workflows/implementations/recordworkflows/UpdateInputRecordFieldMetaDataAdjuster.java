@@ -23,7 +23,6 @@ package com.kingsrook.qbits.workflows.implementations.recordworkflows;
 
 
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.ListIterator;
@@ -31,20 +30,18 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import com.kingsrook.qbits.workflows.definition.WorkflowStepType;
+import com.kingsrook.qbits.workflows.definition.WorkflowsRegistry;
 import com.kingsrook.qbits.workflows.implementations.WorkflowStepUtils;
 import com.kingsrook.qbits.workflows.model.WorkflowRevision;
-import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
 import com.kingsrook.qqq.backend.core.actions.values.SearchPossibleValueSourceAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.logging.QLogger;
-import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.values.SearchPossibleValueSourceInput;
 import com.kingsrook.qqq.backend.core.model.actions.values.SearchPossibleValueSourceOutput;
-import com.kingsrook.qqq.backend.core.model.data.QRecord;
-import com.kingsrook.qqq.backend.core.model.helpcontent.HelpContent;
 import com.kingsrook.qqq.backend.core.model.metadata.code.InitializableViaCodeReference;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReferenceWithProperties;
@@ -52,9 +49,6 @@ import com.kingsrook.qqq.backend.core.model.metadata.fields.FieldAndJoinTable;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldType;
 import com.kingsrook.qqq.backend.core.model.metadata.frontend.QFrontendFieldMetaData;
-import com.kingsrook.qqq.backend.core.model.metadata.help.HelpFormat;
-import com.kingsrook.qqq.backend.core.model.metadata.help.QHelpContent;
-import com.kingsrook.qqq.backend.core.model.metadata.help.QHelpRole;
 import com.kingsrook.qqq.backend.core.model.metadata.tables.QTableMetaData;
 import com.kingsrook.qqq.backend.core.utils.CollectionUtils;
 import com.kingsrook.qqq.backend.core.utils.StringUtils;
@@ -144,23 +138,20 @@ public class UpdateInputRecordFieldMetaDataAdjuster implements FormAdjusterInter
                updatedField.setLabel("Value (" + fieldAndJoinTable.field().getLabel() + ")");
             }
 
-            /////////////////////////////////////
-            // check for any help help content //
-            /////////////////////////////////////
-            String        helpKey            = "workflowStepType:updateInputRecordField;field:value";
-            List<QRecord> helpContentRecords = QueryAction.execute(HelpContent.TABLE_NAME, new QQueryFilter(new QFilterCriteria("key", QCriteriaOperator.EQUALS, helpKey)));
-            if(CollectionUtils.nullSafeHasContents(helpContentRecords))
+            ////////////////////////////////////////////////////////////////////////////////
+            // check the workflow registry to see if there is help content for this field //
+            ////////////////////////////////////////////////////////////////////////////////
+            WorkflowsRegistry workflowsRegistry = WorkflowsRegistry.of(QContext.getQInstance());
+            WorkflowStepType  workflowStepType  = workflowsRegistry.getWorkflowStepType(UpdateInputRecordFieldStep.NAME);
+            if(workflowStepType != null)
             {
-               List<QHelpContent> helpContents = new ArrayList<>();
-               for(QRecord record : helpContentRecords)
+               for(QFieldMetaData fieldMetaData : CollectionUtils.nonNullList(workflowStepType.getInputFields()))
                {
-                  HelpContent helpContent = new HelpContent(record);
-                  helpContents.add(new QHelpContent(helpKey)
-                     .withFormat(HelpFormat.valueOf(helpContent.getFormat()))
-                     .withContent(helpContent.getContent())
-                     .withRole(QHelpRole.valueOf(helpContent.getRole())));
+                  if(fieldMetaData.getName().equals("value"))
+                  {
+                     updatedField.setHelpContents(fieldMetaData.getHelpContents());
+                  }
                }
-               updatedField.setHelpContents(helpContents);
             }
          }
          catch(Exception e)
