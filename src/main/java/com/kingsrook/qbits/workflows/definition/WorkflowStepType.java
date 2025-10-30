@@ -56,8 +56,8 @@ public class WorkflowStepType implements Serializable
    private OutboundLinkMode         outboundLinkMode;
    private List<OutboundLinkOption> outboundLinkOptions;
 
-   private ArrayList<QFieldMetaData> inputFields;
-   private ArrayList<String>         inputWidgetNames;
+   private ArrayList<QFieldMetaData> inputFields      = new ArrayList<>();
+   private ArrayList<String>         inputWidgetNames = new ArrayList<>();
 
 
 
@@ -409,6 +409,7 @@ public class WorkflowStepType implements Serializable
    }
 
 
+
    /*******************************************************************************
     * Getter for validator
     * @see #withValidator(QCodeReference)
@@ -443,6 +444,5 @@ public class WorkflowStepType implements Serializable
       this.validator = validator;
       return (this);
    }
-
 
 }
