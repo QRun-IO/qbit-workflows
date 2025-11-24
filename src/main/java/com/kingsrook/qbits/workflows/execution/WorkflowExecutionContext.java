@@ -42,6 +42,8 @@ public class WorkflowExecutionContext
    private QBackendTransaction       transaction;
    private WorkflowRunLog            workflowRunLog;
 
+   private WorkflowExecutor executor;
+
    private boolean isTestRun = false;
 
 
@@ -233,6 +235,28 @@ public class WorkflowExecutionContext
    {
       this.isTestRun = isTestRun;
       return (this);
+   }
+
+
+
+   /*******************************************************************************
+    * Getter for executor
+    * @see #setExecutor(WorkflowExecutor)
+    *******************************************************************************/
+   WorkflowExecutor getExecutor()
+   {
+      return (this.executor);
+   }
+
+
+
+   /*******************************************************************************
+    * Setter for executor
+    * @param executor the object executing the workflow.
+    *******************************************************************************/
+   void setExecutor(WorkflowExecutor executor)
+   {
+      this.executor = executor;
    }
 
 }

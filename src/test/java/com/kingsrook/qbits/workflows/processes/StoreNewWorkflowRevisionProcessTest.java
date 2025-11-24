@@ -83,7 +83,7 @@ class StoreNewWorkflowRevisionProcessTest extends BaseTest
 
       input.addValue("links", JsonUtils.toJson(List.of(WorkflowsTestDataSource.newLink(1, 2))));
       assertThatThrownBy(() -> new StoreNewWorkflowRevisionProcess().run(input, output))
-         .hasMessageContaining("2 validation errors occurred within the workflow's steps:")
+         .hasMessageContaining("2 validation errors occurred before the workflow could be saved:")
          .hasMessageContaining("Error processing Step 1: Unknown workflow step type myStepType")
          .hasMessageContaining("Error processing Step 2: Unknown workflow step type yourStepType");
 

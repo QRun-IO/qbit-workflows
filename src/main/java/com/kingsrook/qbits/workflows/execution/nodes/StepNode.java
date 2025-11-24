@@ -19,22 +19,29 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.kingsrook.qbits.workflows.definition;
+package com.kingsrook.qbits.workflows.execution.nodes;
+
+
+import java.util.HashMap;
+import java.util.Map;
+import com.kingsrook.qbits.workflows.model.WorkflowStep;
 
 
 /***************************************************************************
- ** How many links can come out of a step-type.
- ** ZERO means a terminal step - nothing out of it.
- ** ONE is a regular statement, that just flows to its next.
- ** CONTAINER is itself a no-op, but it wraps (for UI reasons) a sequence
- ** TWO is for an if/else
- ** VARIABLE is for a variable number - 1 or more
+ * Single step, plus, if it opens a nested scope (e.g., branches, or a container)
+ * then those subSequences, along with their conditionalValues (guards/labels)
+ * as map keys
  ***************************************************************************/
-public enum OutboundLinkMode
+public record StepNode(WorkflowStep step, Map<String, NodeSequence> subSequences)
 {
-   ZERO,
-   ONE,
-   CONTAINER,
-   TWO,
-   VARIABLE
+
+   /*******************************************************************************
+    ** Constructor for step w/o subSequences
+    **
+    *******************************************************************************/
+   public StepNode(WorkflowStep step)
+   {
+      this(step, new HashMap<>());
+   }
+
 }

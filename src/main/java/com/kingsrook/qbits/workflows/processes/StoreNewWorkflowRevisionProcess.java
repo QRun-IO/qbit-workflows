@@ -29,8 +29,10 @@ import java.util.Map;
 import java.util.Objects;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.kingsrook.qbits.workflows.definition.WorkflowStepType;
+import com.kingsrook.qbits.workflows.definition.WorkflowType;
 import com.kingsrook.qbits.workflows.definition.WorkflowsRegistry;
 import com.kingsrook.qbits.workflows.execution.WorkflowStepValidatorInterface;
+import com.kingsrook.qbits.workflows.execution.WorkflowTypeValidatorInterface;
 import com.kingsrook.qbits.workflows.model.Workflow;
 import com.kingsrook.qbits.workflows.model.WorkflowLink;
 import com.kingsrook.qbits.workflows.model.WorkflowRevision;
@@ -291,9 +293,19 @@ public class StoreNewWorkflowRevisionProcess implements BackendStep, MetaDataPro
             }
          });
 
+         ////////////////////////////////////////////////////////////
+         // do workflow-level validation as well, if so configured //
+         ////////////////////////////////////////////////////////////
+         WorkflowType workflowType = WorkflowsRegistry.of(QContext.getQInstance()).getWorkflowType(workflowRecord.getValueString("workflowTypeName"));
+         if(workflowType.getValidator() != null)
+         {
+            WorkflowTypeValidatorInterface validator = QCodeLoader.getAdHoc(WorkflowTypeValidatorInterface.class, workflowType.getValidator());
+            validator.validate(workflowRecord, workflowRevisionRecord, workflowSteps, workflowLinks, errors);
+         }
+
          if(!errors.isEmpty())
          {
-            String message = errors.size() + " validation error" + StringUtils.plural(errors) + " occurred within the workflow's steps:\n" + StringUtils.join("\n", errors);
+            String message = errors.size() + " validation error" + StringUtils.plural(errors) + " occurred before the workflow could be saved:\n" + StringUtils.join("\n", errors);
             throw (new QUserFacingException(message));
          }
 

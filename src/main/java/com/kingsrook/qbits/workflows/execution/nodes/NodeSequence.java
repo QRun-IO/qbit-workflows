@@ -19,46 +19,54 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.kingsrook.qbits.workflows.execution;
+package com.kingsrook.qbits.workflows.execution.nodes;
 
 
-import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 
 
 /***************************************************************************
- **
+ * list of nodes in a graph representation of a workflow
  ***************************************************************************/
-public record WorkflowStepOutput(Serializable outputData, String message, boolean shouldWorkflowImmediatelyStop)
+public record NodeSequence(List<StepNode> nodes)
 {
-
    /*******************************************************************************
     ** Constructor
     **
     *******************************************************************************/
-   public WorkflowStepOutput(Serializable outputData, String message)
+   public NodeSequence()
    {
-      this(outputData, message, false);
-   }
-
-
-   /*******************************************************************************
-    ** Constructor
-    **
-    *******************************************************************************/
-   public WorkflowStepOutput(Serializable outputData)
-   {
-      this(outputData, null, false);
+      this(new ArrayList<>());
    }
 
 
 
-   /*******************************************************************************
-    ** Constructor
-    **
-    *******************************************************************************/
-   public WorkflowStepOutput()
+   /***************************************************************************
+    *
+    ***************************************************************************/
+   public void add(StepNode node)
    {
-      this(null, null, false);
+      nodes.add(node);
    }
 
+
+
+   /***************************************************************************
+    *
+    ***************************************************************************/
+   public StepNode get(int i)
+   {
+      return nodes.get(i);
+   }
+
+
+
+   /***************************************************************************
+    *
+    ***************************************************************************/
+   public int size()
+   {
+      return (nodes.size());
+   }
 }

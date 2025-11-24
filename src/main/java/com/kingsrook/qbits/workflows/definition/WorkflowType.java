@@ -31,6 +31,7 @@ import java.util.Map;
 import com.google.gson.reflect.TypeToken;
 import com.kingsrook.qbits.workflows.execution.WorkflowTypeExecutorInterface;
 import com.kingsrook.qbits.workflows.execution.WorkflowTypeTesterInterface;
+import com.kingsrook.qbits.workflows.execution.WorkflowTypeValidatorInterface;
 import com.kingsrook.qqq.backend.core.instances.QInstanceEnricher;
 import com.kingsrook.qqq.backend.core.instances.QInstanceValidator;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
@@ -52,6 +53,7 @@ public class WorkflowType implements Serializable
    private String         label;
    private String         description;
    private QCodeReference executor;
+   private QCodeReference validator;
    private QCodeReference tester;
 
    protected Map<String, List<QHelpContent>>     helpContent;
@@ -82,6 +84,11 @@ public class WorkflowType implements Serializable
       if(qInstanceValidator.assertCondition(executor != null, "WorkflowType [" + name + "]: executor is required."))
       {
          qInstanceValidator.validateSimpleCodeReference("WorkflowType [" + name + "]: executor ", executor, WorkflowTypeExecutorInterface.class);
+      }
+
+      if(validator != null)
+      {
+         qInstanceValidator.validateSimpleCodeReference("WorkflowType [" + name + "]: validator ", validator, WorkflowTypeValidatorInterface.class);
       }
 
       if(tester != null)
@@ -357,5 +364,43 @@ public class WorkflowType implements Serializable
       this.helpContent.get(key).add(helpContent);
       return (this);
    }
+
+
+   /*******************************************************************************
+    * Getter for validator
+    * @see #withValidator(QCodeReference)
+    *******************************************************************************/
+   public QCodeReference getValidator()
+   {
+      return (this.validator);
+   }
+
+
+
+   /*******************************************************************************
+    * Setter for validator
+    * @see #withValidator(QCodeReference)
+    *******************************************************************************/
+   public void setValidator(QCodeReference validator)
+   {
+      this.validator = validator;
+   }
+
+
+
+   /*******************************************************************************
+    * Fluent setter for validator
+    *
+    * @param validator reference to implementation of
+    * {@link com.kingsrook.qbits.workflows.execution.WorkflowTypeValidatorInterface}
+    *
+    * @return this
+    *******************************************************************************/
+   public WorkflowType withValidator(QCodeReference validator)
+   {
+      this.validator = validator;
+      return (this);
+   }
+
 
 }

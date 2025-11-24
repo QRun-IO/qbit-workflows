@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Stack;
+import java.util.concurrent.atomic.AtomicInteger;
 import com.google.gson.reflect.TypeToken;
 import com.kingsrook.qbits.workflows.definition.OutboundLinkMode;
 import com.kingsrook.qbits.workflows.definition.WorkflowStepType;
@@ -71,6 +72,7 @@ public class WorkflowExecutor extends AbstractQActionBiConsumer<WorkflowInput, W
    private WorkflowRunLog          inputWorkflowRunLog;
 
    private Stack<Integer> containerStack = new Stack<>();
+   private ExecutionPayload payload;
 
 
 
@@ -167,31 +169,10 @@ public class WorkflowExecutor extends AbstractQActionBiConsumer<WorkflowInput, W
          ///////////////
          // step loop //
          ///////////////
-         Integer stepNo = workflowRevision.getStartStepNo();
-         int     seqNo  = 1;
-         while(stepNo != null)
-         {
-            WorkflowStep step = stepMap.get(stepNo);
-            if(step == null)
-            {
-               throw new QException("Step not found by stepNo: " + stepNo);
-            }
-
-            WorkflowRunLogStep workflowRunLogStep = new WorkflowRunLogStep();
-            workflowRunLogStep.setWorkflowStepId(step.getId());
-            workflowRunLogStep.setSeqNo(seqNo);
-            workflowRunLogStep.setStartTimestamp(Instant.now());
-            logStepList.add(workflowRunLogStep);
-
-            WorkflowStepOutput workflowStepOutput = executeStep(step, workflowTypeExecutor, context);
-            workflowRunLogStep.setOutputData(ValueUtils.getValueAsString(workflowStepOutput.outputData()));
-            workflowRunLogStep.setMessage(workflowStepOutput.message());
-
-            stepNo = getNextStepNo(workflowStepOutput.outputData(), step, linkMap, stepMap, false);
-
-            workflowRunLogStep.setEndTimestamp(Instant.now());
-            seqNo++;
-         }
+         ExecutionPayload payload = new ExecutionPayload(stepMap, linkMap, workflowTypeExecutor, new AtomicInteger(1), logStepList);
+         this.payload = payload;
+         context.setExecutor(this);
+         runStepLoop(workflowRevision.getStartStepNo(), context, null);
 
          workflowTypeExecutor.postRun(context);
 
@@ -235,6 +216,51 @@ public class WorkflowExecutor extends AbstractQActionBiConsumer<WorkflowInput, W
             closeTransaction(context);
          }
       }
+   }
+
+
+
+   /***************************************************************************
+    * @return true if the workflow should immediately stop
+    ***************************************************************************/
+   boolean runStepLoop(Integer stepNo, WorkflowExecutionContext context, Integer stopStepNo) throws QException
+   {
+      while(stepNo != null)
+      {
+         WorkflowStep step = payload.stepMap().get(stepNo);
+         if(step == null)
+         {
+            throw new QException("Step not found by stepNo: " + stepNo);
+         }
+
+         WorkflowRunLogStep workflowRunLogStep = new WorkflowRunLogStep();
+         workflowRunLogStep.setWorkflowStepId(step.getId());
+         workflowRunLogStep.setStartTimestamp(Instant.now());
+
+         WorkflowStepOutput workflowStepOutput = executeStep(step, payload, context);
+
+         stepNo = getNextStepNo(workflowStepOutput.outputData(), step, payload.linkMap(), payload.stepMap(), false);
+
+         workflowRunLogStep.setEndTimestamp(Instant.now());
+         workflowRunLogStep.setOutputData(ValueUtils.getValueAsString(workflowStepOutput.outputData()));
+         workflowRunLogStep.setMessage(workflowStepOutput.message());
+         workflowRunLogStep.setSeqNo(payload.seqNo().getAndIncrement());
+         payload.logStepList().add(workflowRunLogStep);
+
+         if(stopStepNo != null && Objects.equals(stepNo, stopStepNo))
+         {
+            LOG.debug("Stopping at requested step", logPair("stopStepNo", stepNo));
+            return (false);
+         }
+
+         if(workflowStepOutput.shouldWorkflowImmediatelyStop())
+         {
+            LOG.info("Stopping step loop due to step output indicating workflow should immediately stop", logPair("stepNo", stepNo));
+            return (true);
+         }
+      }
+
+      return (false);
    }
 
 
@@ -332,13 +358,23 @@ public class WorkflowExecutor extends AbstractQActionBiConsumer<WorkflowInput, W
          }
       }
 
-      Integer                       fromStepNo      = fromStep.getStepNo();
-      List<WorkflowLink>            links           = linkMap.get(fromStepNo);
-      Class<? extends Serializable> stepOutputClass = stepOutput == null ? null : stepOutput.getClass();
+      Integer            fromStepNo = fromStep.getStepNo();
+      List<WorkflowLink> links      = linkMap.get(fromStepNo);
+
+      if(OutboundLinkMode.VARIABLE.equals(fromWorkflowStepType.getOutboundLinkMode()))
+      {
+         /////////////////////////////////////////////////////////////////////////////
+         // after a VARIABLE step (where its branches were all executed in          //
+         // processMultiForkingStep), find the first join point, and step to there. //
+         /////////////////////////////////////////////////////////////////////////////
+         Integer joinStepNo = FindFirstJoinPoint.execute(links.stream().map(wl -> wl.getToStepNo()).toList(), stepMap, linkMap);
+         return (joinStepNo);
+      }
 
       //////////////////////////////////////////////////////////////////////////////////////
       // look for a link between the fromStepNo matching the stepOutput / condition value //
       //////////////////////////////////////////////////////////////////////////////////////
+      List<String> evaluatedConditionValues = new ArrayList<>();
       for(WorkflowLink link : CollectionUtils.nonNullList(links))
       {
          if(link.getConditionValue() == null)
@@ -350,8 +386,10 @@ public class WorkflowExecutor extends AbstractQActionBiConsumer<WorkflowInput, W
          }
          else
          {
+            evaluatedConditionValues.add(link.getConditionValue());
             try
             {
+               Class<? extends Serializable> stepOutputClass = stepOutput == null ? null : stepOutput.getClass();
                Serializable valueAsType = stepOutputClass == null ? link.getConditionValue() : ValueUtils.getValueAsType(stepOutputClass, link.getConditionValue());
                if(Objects.equals(valueAsType, stepOutput))
                {
@@ -363,6 +401,11 @@ public class WorkflowExecutor extends AbstractQActionBiConsumer<WorkflowInput, W
                LOG.debug("Unable to evaluate condition value: " + link.getConditionValue() + " for step: " + fromStepNo, e);
             }
          }
+      }
+
+      if(CollectionUtils.nullSafeHasContents(evaluatedConditionValues))
+      {
+         LOG.info("Evaluated at least 1 link condition value, but found no matches", logPair("evaluatedConditionValues", evaluatedConditionValues));
       }
 
       /////////////////////////////////////////////////////////////////////////
@@ -385,7 +428,7 @@ public class WorkflowExecutor extends AbstractQActionBiConsumer<WorkflowInput, W
    /***************************************************************************
     **
     ***************************************************************************/
-   private WorkflowStepOutput executeStep(WorkflowStep step, WorkflowTypeExecutorInterface workflowTypeExecutor, WorkflowExecutionContext context) throws QException
+   private WorkflowStepOutput executeStep(WorkflowStep step, ExecutionPayload payload, WorkflowExecutionContext context) throws QException
    {
       WorkflowStepType workflowStepType = WorkflowsRegistry.of(QContext.getQInstance()).getWorkflowStepType(step.getWorkflowStepTypeName());
       if(workflowStepType == null)
@@ -399,8 +442,7 @@ public class WorkflowExecutor extends AbstractQActionBiConsumer<WorkflowInput, W
       }
 
       WorkflowStepExecutorInterface workflowStepExecutor = QCodeLoader.getAdHoc(WorkflowStepExecutorInterface.class, workflowStepType.getExecutor());
-
-      workflowTypeExecutor.preStep(step, context);
+      payload.workflowTypeExecutor().preStep(step, context);
 
       JSONObject                jsonObject  = JsonUtils.toJSONObject(step.getInputValuesJson());
       Map<String, Object>       mapValues   = jsonObject.toMap();
@@ -415,9 +457,19 @@ public class WorkflowExecutor extends AbstractQActionBiConsumer<WorkflowInput, W
       }
 
       WorkflowStepOutput workflowStepOutput = workflowStepExecutor.execute(step, inputValues, context);
-      workflowStepOutput = workflowTypeExecutor.postStep(step, context, workflowStepOutput);
+      workflowStepOutput = payload.workflowTypeExecutor().postStep(step, context, workflowStepOutput);
 
       return workflowStepOutput;
+   }
+
+
+
+   /***************************************************************************
+    *
+    ***************************************************************************/
+   ExecutionPayload getPayload()
+   {
+      return (this.payload);
    }
 
 

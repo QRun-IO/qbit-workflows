@@ -23,7 +23,12 @@ package com.kingsrook.qbits.workflows.processes;
 
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import com.google.gson.reflect.TypeToken;
+import com.kingsrook.qbits.workflows.definition.OutboundLinkMode;
+import com.kingsrook.qbits.workflows.definition.OutboundLinkOption;
 import com.kingsrook.qbits.workflows.definition.WorkflowStepType;
 import com.kingsrook.qbits.workflows.definition.WorkflowsRegistry;
 import com.kingsrook.qqq.backend.core.actions.processes.BackendStep;
@@ -41,17 +46,23 @@ import com.kingsrook.qqq.backend.core.model.metadata.permissions.QPermissionRule
 import com.kingsrook.qqq.backend.core.model.metadata.processes.QBackendStepMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.processes.QFunctionInputMetaData;
 import com.kingsrook.qqq.backend.core.model.metadata.processes.QProcessMetaData;
+import com.kingsrook.qqq.backend.core.utils.CollectionUtils;
 import com.kingsrook.qqq.backend.core.utils.ValueUtils;
 
 
 /*******************************************************************************
- ** process to get a dynamic summary of a workflow step, e.g., as it's being
- ** edited in a UI.
+ * process to get values that the backend must compute about a workflow step,
+ * based on input values, e.g., as a user is editing the step in a UI.
+ *
+ * Originally this was just the step summary (e.g., workflowStepType.getDynamicStepSummary)
+ *
+ * Then, when variable outboundLinkModes were added, also responsible for returning
+ * the link options to use for a step, based on its input values.
+ *
  *******************************************************************************/
-@Deprecated(since = "0.115.0 - November 2025 - Replaced by GetWorkflowStepDynamicValuesProcess")
-public class GetWorkflowStepSummaryProcess implements BackendStep, MetaDataProducerInterface<QProcessMetaData>
+public class GetWorkflowStepDynamicValuesProcess implements BackendStep, MetaDataProducerInterface<QProcessMetaData>
 {
-   public static final String NAME = "getWorkflowStepSummary";
+   public static final String NAME = "getWorkflowStepDynamicValues";
 
 
 
@@ -90,6 +101,16 @@ public class GetWorkflowStepSummaryProcess implements BackendStep, MetaDataProdu
 
       WorkflowStepType workflowStepType = WorkflowsRegistry.of(QContext.getQInstance()).getWorkflowStepType(workflowStepTypeName);
       runBackendStepOutput.addValue("summary", workflowStepType.getDynamicStepSummary(workflowId, valueAsMap));
+
+      if(OutboundLinkMode.VARIABLE.equals(workflowStepType.getOutboundLinkMode()))
+      {
+         List<OutboundLinkOption> dynamicOutboundLinkOptions = workflowStepType.getDynamicOutboundLinkOptions(workflowId, valueAsMap);
+         if(dynamicOutboundLinkOptions != null)
+         {
+            ArrayList<OutboundLinkOption> outboundLinkOptions = CollectionUtils.useOrWrap(dynamicOutboundLinkOptions, new TypeToken<>() {});
+            runBackendStepOutput.addValue("outboundLinkOptions", outboundLinkOptions);
+         }
+      }
    }
 
 }

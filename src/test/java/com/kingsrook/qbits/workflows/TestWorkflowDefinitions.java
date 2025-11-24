@@ -32,11 +32,13 @@ import com.kingsrook.qbits.workflows.definition.WorkflowType;
 import com.kingsrook.qbits.workflows.definition.WorkflowsRegistry;
 import com.kingsrook.qbits.workflows.execution.WorkflowExecutionContext;
 import com.kingsrook.qbits.workflows.execution.WorkflowInput;
+import com.kingsrook.qbits.workflows.execution.WorkflowMultiForkingStepExecutorInterface;
 import com.kingsrook.qbits.workflows.execution.WorkflowStepExecutorInterface;
 import com.kingsrook.qbits.workflows.execution.WorkflowStepOutput;
 import com.kingsrook.qbits.workflows.execution.WorkflowTypeExecutorInterface;
 import com.kingsrook.qbits.workflows.execution.WorkflowTypeTesterInterface;
 import com.kingsrook.qbits.workflows.model.Workflow;
+import com.kingsrook.qbits.workflows.model.WorkflowLink;
 import com.kingsrook.qbits.workflows.model.WorkflowRevision;
 import com.kingsrook.qbits.workflows.model.WorkflowStep;
 import com.kingsrook.qqq.backend.core.context.QContext;
@@ -55,6 +57,8 @@ public class TestWorkflowDefinitions
    public static final String ADD_X_TO_SUM_ACTION = "addXToSumAction";
    public static final String BOOLEAN_CONDITIONAL = "booleanConditional";
    public static final String CONTAINER           = "container";
+
+   public static final String SPLIT_BY_LETTERS_IN_NAME = "splitByLettersInName";
 
 
 
@@ -93,6 +97,12 @@ public class TestWorkflowDefinitions
          .withOutboundLinkMode(OutboundLinkMode.CONTAINER)
          .withLabel("Container")
          .withDescription("Group steps in the UI"));
+
+      WorkflowsRegistry.of(QContext.getQInstance()).registerWorkflowStepType(new WorkflowStepType()
+         .withName(SPLIT_BY_LETTERS_IN_NAME)
+         .withOutboundLinkMode(OutboundLinkMode.VARIABLE)
+         .withLabel("Split by letters in name")
+         .withExecutor(new QCodeReference(SplitByLettersInNameExecutor.class)));
    }
 
 
@@ -223,6 +233,59 @@ public class TestWorkflowDefinitions
          Boolean condition = ValueUtils.getValueAsBoolean(context.getValues().getOrDefault("condition", false));
          return (new WorkflowStepOutput(condition));
       }
+   }
+
+
+
+   /***************************************************************************
+    *
+    ***************************************************************************/
+   public static class SplitByLettersInNameExecutor implements WorkflowMultiForkingStepExecutorInterface
+   {
+
+      /***************************************************************************
+       *
+       ***************************************************************************/
+      @Override
+      public WorkflowStepOutput conditionallyExecuteFork(WorkflowStep step, WorkflowLink fork, Map<String, Serializable> inputValues, WorkflowExecutionContext context)
+      {
+         String conditionValue = fork.getConditionValue();
+         String name           = ValueUtils.getValueAsString(context.getValues().get("name"));
+
+         if(name.contains(conditionValue))
+         {
+            return (new WorkflowStepOutput(true, "name [" + name + "] contains [" +  conditionValue + "]"));
+         }
+         else
+         {
+            return (new WorkflowStepOutput(false, "name [" + name + "] does not contain [" +  conditionValue + "]"));
+         }
+      }
+
+
+
+      /***************************************************************************
+       *
+       ***************************************************************************/
+      @Override
+      public WorkflowStepOutput makeWorkflowStepOutput(WorkflowStep step, Map<String, Serializable> inputValues, WorkflowExecutionContext context) throws QException
+      {
+         return new WorkflowStepOutput(1, "Output");
+      }
+
+
+
+      /***************************************************************************
+       *
+       ***************************************************************************/
+      @Override
+      public void sortForks(List<WorkflowLink> forkLinks, WorkflowStep step, Map<String, Serializable> inputValues, WorkflowExecutionContext context)
+      {
+         /////////////////////
+         // noop by default //
+         /////////////////////
+      }
+
    }
 
 }

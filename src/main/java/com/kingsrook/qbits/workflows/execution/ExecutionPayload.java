@@ -19,22 +19,23 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.kingsrook.qbits.workflows.definition;
+package com.kingsrook.qbits.workflows.execution;
+
+
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import com.kingsrook.qbits.workflows.model.WorkflowLink;
+import com.kingsrook.qbits.workflows.model.WorkflowRunLogStep;
+import com.kingsrook.qbits.workflows.model.WorkflowStep;
+import com.kingsrook.qqq.backend.core.utils.ListingHash;
 
 
 /***************************************************************************
- ** How many links can come out of a step-type.
- ** ZERO means a terminal step - nothing out of it.
- ** ONE is a regular statement, that just flows to its next.
- ** CONTAINER is itself a no-op, but it wraps (for UI reasons) a sequence
- ** TWO is for an if/else
- ** VARIABLE is for a variable number - 1 or more
+ * state data carried throughout the {@link WorkflowExecutor} - which is
+ * useful to "leak out" in a managed way, e.g., for step types that do their
+ * own more sophisticated kind of execution, e.g., {@link WorkflowMultiForkingStepExecutorInterface}
  ***************************************************************************/
-public enum OutboundLinkMode
+record ExecutionPayload(Map<Integer, WorkflowStep> stepMap, ListingHash<Integer, WorkflowLink> linkMap, WorkflowTypeExecutorInterface workflowTypeExecutor, AtomicInteger seqNo, List<WorkflowRunLogStep> logStepList)
 {
-   ZERO,
-   ONE,
-   CONTAINER,
-   TWO,
-   VARIABLE
 }
