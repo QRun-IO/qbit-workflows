@@ -98,6 +98,11 @@ public class RecordWorkflowInputRecordFilterWidget extends AbstractWidgetRendere
    public static void applyApiNameAndVersionFromInputToWidgetData(RenderWidgetInput input, FilterAndColumnsSetupData widgetData)
    {
       String apiName = input.getQueryParams().get("workflowRevision.apiName");
+      if(!StringUtils.hasContent(apiName))
+      {
+         apiName = input.getQueryParams().get("apiName");
+      }
+
       if(StringUtils.hasContent(apiName))
       {
          widgetData.setApiName(apiName);
@@ -113,6 +118,11 @@ public class RecordWorkflowInputRecordFilterWidget extends AbstractWidgetRendere
       }
 
       String apiVersion = input.getQueryParams().get("workflowRevision.apiVersion");
+      if(!StringUtils.hasContent(apiVersion))
+      {
+         apiVersion = input.getQueryParams().get("apiVersion");
+      }
+
       if(StringUtils.hasContent(apiVersion))
       {
          widgetData.setApiVersion(apiVersion);
