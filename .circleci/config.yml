@@ -26,7 +26,7 @@ workflows:
 
   publish_feature:
     jobs:
-      - qqq-orb/mvn_frontend_publish:
+      - qqq-orb/mvn_publish:
           context: [qqq-maven-registry-credentials]
           branch_type: feature
           filters:
