@@ -29,8 +29,16 @@ import com.kingsrook.qbits.workflows.BaseTest;
 import com.kingsrook.qbits.workflows.TestWorkflowDefinitions;
 import com.kingsrook.qbits.workflows.WorkflowsTestDataSource;
 import com.kingsrook.qbits.workflows.model.Workflow;
+import com.kingsrook.qbits.workflows.model.WorkflowLink;
+import com.kingsrook.qqq.backend.core.actions.tables.DeleteAction;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
+import com.kingsrook.qqq.backend.core.model.actions.tables.delete.DeleteInput;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
+import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
+import com.kingsrook.qqq.backend.core.utils.ValueUtils;
 import com.kingsrook.qqq.backend.core.utils.collections.MapBuilder;
+import com.kingsrook.qqq.backend.core.utils.lambdas.UnsafeFunction;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -297,6 +305,183 @@ class WorkflowExecutorTest extends BaseTest
       output = executeWorkflow(workflowId, MapBuilder.of("condition", true, "seedValue", null));
       assertThat(output.getException()).isInstanceOf(NullPointerException.class);
       assertThat(output.getWorkflowRunLog().getErrorMessage()).contains("intValue()\" because \"sum\" is null");
+   }
+
+
+
+   /*******************************************************************************
+    **
+    *******************************************************************************/
+   @Test
+   void testMultiForkingStep() throws Exception
+   {
+      TestWorkflowDefinitions.registerTestWorkflowTypes();
+
+      ///////////////////////////////////
+      // build a workflow with 3 forks //
+      // .  1                          //
+      // ./ | \                        //
+      // 2  3  4                       //
+      ///////////////////////////////////
+      Workflow workflow = WorkflowsTestDataSource.insertWorkflowAndInitialRevision(TestWorkflowDefinitions.TEST_WORKFLOW_TYPE, null);
+      WorkflowsTestDataSource.insertSteps(workflow, List.of(
+         WorkflowsTestDataSource.newStep(1, TestWorkflowDefinitions.SPLIT_BY_LETTERS_IN_NAME, Map.of()),
+         WorkflowsTestDataSource.newStep(2, TestWorkflowDefinitions.ADD_X_TO_SUM_ACTION, Map.of("x", 1)), // "a"
+         WorkflowsTestDataSource.newStep(3, TestWorkflowDefinitions.ADD_X_TO_SUM_ACTION, Map.of("x", 2)), // "b"
+         WorkflowsTestDataSource.newStep(4, TestWorkflowDefinitions.ADD_X_TO_SUM_ACTION, Map.of("x", 4))  // "c"
+      ));
+      WorkflowsTestDataSource.insertLinks(workflow, List.of(
+         WorkflowsTestDataSource.newLink(1, 2, "a"), // += 1
+         WorkflowsTestDataSource.newLink(1, 3, "b"), // += 2
+         WorkflowsTestDataSource.newLink(1, 4, "c"), // += 3
+         WorkflowsTestDataSource.newLink(2, null),
+         WorkflowsTestDataSource.newLink(3, null),
+         WorkflowsTestDataSource.newLink(4, null)
+      ));
+
+      UnsafeFunction<String, Integer, ?> run  = (String name) ->
+      {
+         WorkflowOutput output = executeWorkflow(workflow.getId(), Map.of("seedValue", 0, "name", name));
+         return ValueUtils.getValueAsInteger(output.getContext().getValues().get("sum"));
+      };
+
+      assertEquals(1, run.apply("dave"));
+      assertEquals(3, run.apply("barry"));
+      assertEquals(5, run.apply("carl"));
+      assertEquals(7, run.apply("braces"));
+      assertEquals(0, run.apply("lou"));
+
+      //////////////////////////////////////
+      // add a step (5) after the 3 forks //
+      //////////////////////////////////////
+      WorkflowsTestDataSource.insertSteps(workflow, List.of(
+         WorkflowsTestDataSource.newStep(5, TestWorkflowDefinitions.ADD_X_TO_SUM_ACTION, Map.of("x", 8))
+      ));
+      WorkflowsTestDataSource.insertLinks(workflow, List.of(
+         WorkflowsTestDataSource.newLink(2, 5),
+         WorkflowsTestDataSource.newLink(3, 5),
+         WorkflowsTestDataSource.newLink(4, 5)
+      ));
+
+      //////////////////////////////////
+      // get rid of the links to null //
+      //////////////////////////////////
+      new DeleteAction().execute(new DeleteInput(WorkflowLink.TABLE_NAME).withQueryFilter(new QQueryFilter(new QFilterCriteria("toStepNo", QCriteriaOperator.IS_BLANK))));
+
+      assertEquals(10, run.apply("bobby"));
+      assertEquals(15, run.apply("braces"));
+      assertEquals(8, run.apply("lou"));
+   }
+
+
+
+   /*******************************************************************************
+    **
+    *******************************************************************************/
+   @Test
+   void testNestedMultiForkingStep() throws Exception
+   {
+      TestWorkflowDefinitions.registerTestWorkflowTypes();
+
+      /////////////////////////////////////////////////////////////////////////////
+      // build a workflow with 3 top-level forks, one of which has 2 nested ones //
+      // .  1                                                                    //
+      // ./ | \                                                                  //
+      // 2  3  4                                                                 //
+      // |  |  | \                                                               //
+      // |  |  5  6                                                              //
+      // .\ \  / /                                                               //
+      // .   7                                                                   //
+      /////////////////////////////////////////////////////////////////////////////
+      Workflow workflow = WorkflowsTestDataSource.insertWorkflowAndInitialRevision(TestWorkflowDefinitions.TEST_WORKFLOW_TYPE, null);
+      WorkflowsTestDataSource.insertSteps(workflow, List.of(
+         WorkflowsTestDataSource.newStep(1, TestWorkflowDefinitions.SPLIT_BY_LETTERS_IN_NAME, Map.of()),
+         WorkflowsTestDataSource.newStep(2, TestWorkflowDefinitions.ADD_X_TO_SUM_ACTION, Map.of("x", 1)), // "a"
+         WorkflowsTestDataSource.newStep(3, TestWorkflowDefinitions.ADD_X_TO_SUM_ACTION, Map.of("x", 2)), // "b"
+         WorkflowsTestDataSource.newStep(4, TestWorkflowDefinitions.SPLIT_BY_LETTERS_IN_NAME, Map.of()),
+         WorkflowsTestDataSource.newStep(5, TestWorkflowDefinitions.ADD_X_TO_SUM_ACTION, Map.of("x", 4)), // "c"
+         WorkflowsTestDataSource.newStep(6, TestWorkflowDefinitions.ADD_X_TO_SUM_ACTION, Map.of("x", 8)), // "d"
+         WorkflowsTestDataSource.newStep(7, TestWorkflowDefinitions.ADD_X_TO_SUM_ACTION, Map.of("x", 16))
+      ));
+      WorkflowsTestDataSource.insertLinks(workflow, List.of(
+         WorkflowsTestDataSource.newLink(1, 2, "a"), // += 1
+         WorkflowsTestDataSource.newLink(1, 3, "b"), // += 2
+         WorkflowsTestDataSource.newLink(1, 4, ""),  //
+         WorkflowsTestDataSource.newLink(4, 5, "c"), // += 4
+         WorkflowsTestDataSource.newLink(4, 6, "d"), // += 8
+         WorkflowsTestDataSource.newLink(2, 7), // += 16
+         WorkflowsTestDataSource.newLink(3, 7), // += 16
+         WorkflowsTestDataSource.newLink(5, 7), // += 16
+         WorkflowsTestDataSource.newLink(6, 7)  // += 16
+      ));
+
+      UnsafeFunction<String, Integer, ?> run  = (String name) ->
+      {
+         WorkflowOutput output = executeWorkflow(workflow.getId(), Map.of("seedValue", 0, "name", name));
+         return ValueUtils.getValueAsInteger(output.getContext().getValues().get("sum"));
+      };
+
+      assertEquals(17, run.apply("allen"));
+      assertEquals(19, run.apply("barry"));
+      assertEquals(21, run.apply("carl"));
+      assertEquals(24, run.apply("donny"));
+      assertEquals(16, run.apply("lou"));
+   }
+
+
+
+   /*******************************************************************************
+    **
+    *******************************************************************************/
+   @Test
+   void testStackedMultiForkingStep() throws Exception
+   {
+      TestWorkflowDefinitions.registerTestWorkflowTypes();
+
+      /////////////////////////////////////////////
+      // build a workflow with two 2-level forks //
+      // . 1                                     //
+      // ./ \                                    //
+      // 2   3                                   //
+      // .\ /                                    //
+      // . 4                                     //
+      // ./ \                                    //
+      // 5   6                                   //
+      /////////////////////////////////////////////
+      Workflow workflow = WorkflowsTestDataSource.insertWorkflowAndInitialRevision(TestWorkflowDefinitions.TEST_WORKFLOW_TYPE, null);
+      WorkflowsTestDataSource.insertSteps(workflow, List.of(
+         WorkflowsTestDataSource.newStep(1, TestWorkflowDefinitions.SPLIT_BY_LETTERS_IN_NAME, Map.of()),
+         WorkflowsTestDataSource.newStep(2, TestWorkflowDefinitions.ADD_X_TO_SUM_ACTION, Map.of("x", 1)), // "a"
+         WorkflowsTestDataSource.newStep(3, TestWorkflowDefinitions.ADD_X_TO_SUM_ACTION, Map.of("x", 2)), // "b"
+         WorkflowsTestDataSource.newStep(4, TestWorkflowDefinitions.SPLIT_BY_LETTERS_IN_NAME, Map.of()),
+         WorkflowsTestDataSource.newStep(5, TestWorkflowDefinitions.ADD_X_TO_SUM_ACTION, Map.of("x", 4)), // "c"
+         WorkflowsTestDataSource.newStep(6, TestWorkflowDefinitions.ADD_X_TO_SUM_ACTION, Map.of("x", 8))  // "d"
+      ));
+      WorkflowsTestDataSource.insertLinks(workflow, List.of(
+         WorkflowsTestDataSource.newLink(1, 2, "a"), // += 1
+         WorkflowsTestDataSource.newLink(1, 3, "b"), // += 2
+         WorkflowsTestDataSource.newLink(2, 4),
+         WorkflowsTestDataSource.newLink(3, 4),
+         WorkflowsTestDataSource.newLink(4, 5, "c"), // += 4
+         WorkflowsTestDataSource.newLink(4, 6, "d"), // += 8
+         WorkflowsTestDataSource.newLink(5, null),
+         WorkflowsTestDataSource.newLink(6, null)
+      ));
+
+      UnsafeFunction<String, Integer, ?> run  = (String name) ->
+      {
+         WorkflowOutput output = executeWorkflow(workflow.getId(), Map.of("seedValue", 0, "name", name));
+         return ValueUtils.getValueAsInteger(output.getContext().getValues().get("sum"));
+      };
+
+      assertEquals(1, run.apply("allen"));
+      assertEquals(3, run.apply("barry"));
+      assertEquals(5, run.apply("carl"));
+      assertEquals(8, run.apply("donny"));
+      assertEquals(4, run.apply("connie"));
+      assertEquals(12, run.apply("doc"));
+      assertEquals(15, run.apply("abcd"));
+      assertEquals(0, run.apply("lou"));
    }
 
 

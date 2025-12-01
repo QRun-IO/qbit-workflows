@@ -83,18 +83,28 @@ public class RecordWorkflowUtils
 
 
    /***************************************************************************
-    **
+    * expects name in inputValues to be "queryFilterJson"
     ***************************************************************************/
    public static QQueryFilter getFilterFromInput(Map<String, ?> inputValues) throws QException
    {
+      Object object = inputValues.get("queryFilterJson");
+      if(object == null)
+      {
+         throw (new QException("Could not find filter in input values"));
+      }
+
+      return getFilterFromJsonOrObject(object);
+   }
+
+
+
+   /***************************************************************************
+    * supported input types are:  QQueryFilter, String (json), Map.
+    ***************************************************************************/
+   public static QQueryFilter getFilterFromJsonOrObject(Object object) throws QException
+   {
       try
       {
-         Object object = inputValues.get("queryFilterJson");
-         if(object == null)
-         {
-            throw (new QException("Could not find filter in input values"));
-         }
-
          if(object instanceof QQueryFilter qQueryFilter)
          {
             return (qQueryFilter);
@@ -114,7 +124,7 @@ public class RecordWorkflowUtils
       }
       catch(IOException e)
       {
-         throw new QException("Error getting filter from input values", e);
+         throw new QException("Error getting filter from Object", e);
       }
    }
 

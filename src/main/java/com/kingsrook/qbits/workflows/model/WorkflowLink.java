@@ -84,7 +84,7 @@ public class WorkflowLink extends QRecordEntity
    @QField(isRequired = true)
    private Integer fromStepNo;
 
-   @QField(isRequired = true)
+   @QField()
    private Integer toStepNo;
 
    @QField(maxLength = 20, valueTooLongBehavior = ValueTooLongBehavior.ERROR)

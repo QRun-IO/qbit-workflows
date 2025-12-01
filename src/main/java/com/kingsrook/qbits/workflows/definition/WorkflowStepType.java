@@ -26,6 +26,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import com.google.gson.reflect.TypeToken;
 import com.kingsrook.qbits.workflows.execution.WorkflowStepExecutorInterface;
 import com.kingsrook.qqq.backend.core.actions.customizers.QCodeLoader;
@@ -56,6 +57,8 @@ public class WorkflowStepType implements Serializable
    private OutboundLinkMode         outboundLinkMode;
    private List<OutboundLinkOption> outboundLinkOptions;
 
+   private Set<String> allowedDescendantStepTypes;
+
    private ArrayList<QFieldMetaData> inputFields      = new ArrayList<>();
    private ArrayList<String>         inputWidgetNames = new ArrayList<>();
 
@@ -77,6 +80,17 @@ public class WorkflowStepType implements Serializable
     **
     ***************************************************************************/
    public String getDynamicStepSummary(Integer workflowId, Map<String, Serializable> inputValues) throws QException
+   {
+      return (null);
+   }
+
+
+
+   /***************************************************************************
+    * for a variable-output type step, it must dynamically define its outbound
+    * links
+    ***************************************************************************/
+   public List<OutboundLinkOption> getDynamicOutboundLinkOptions(Integer workflowId, Map<String, Serializable> inputValues) throws QException
    {
       return (null);
    }
@@ -444,5 +458,44 @@ public class WorkflowStepType implements Serializable
       this.validator = validator;
       return (this);
    }
+
+
+
+   /*******************************************************************************
+    * Getter for allowedDescendantStepTypes
+    * @see #withAllowedDescendantStepTypes(Set)
+    *******************************************************************************/
+   public Set<String> getAllowedDescendantStepTypes()
+   {
+      return (this.allowedDescendantStepTypes);
+   }
+
+
+
+   /*******************************************************************************
+    * Setter for allowedDescendantStepTypes
+    * @see #withAllowedDescendantStepTypes(Set)
+    *******************************************************************************/
+   public void setAllowedDescendantStepTypes(Set<String> allowedDescendantStepTypes)
+   {
+      this.allowedDescendantStepTypes = allowedDescendantStepTypes;
+   }
+
+
+
+   /*******************************************************************************
+    * Fluent setter for allowedDescendantStepTypes
+    *
+    * @param allowedDescendantStepTypes
+    * to limit what step types can be placed inside this step type within a graph.
+    * for example,
+    * @return this
+    *******************************************************************************/
+   public WorkflowStepType withAllowedDescendantStepTypes(Set<String> allowedDescendantStepTypes)
+   {
+      this.allowedDescendantStepTypes = allowedDescendantStepTypes;
+      return (this);
+   }
+
 
 }
