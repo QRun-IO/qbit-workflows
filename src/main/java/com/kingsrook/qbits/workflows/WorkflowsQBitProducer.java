@@ -173,8 +173,9 @@ public class WorkflowsQBitProducer implements QBitMetaDataProducer<WorkflowsQBit
       tableTriggerTable.withField(new QFieldMetaData("workflowId", QFieldType.INTEGER)
          .withBackendName("workflow_id")
          .withPossibleValueSourceName(Workflow.TABLE_NAME)
-         .withPossibleValueSourceFilter(new QQueryFilter(
-            new QFilterCriteria("tableName", QCriteriaOperator.EQUALS, "${input.tableName}"))));
+         .withPossibleValueSourceFilter(new QQueryFilter()
+            .withCriteria(new QFilterCriteria("workflowTypeName", QCriteriaOperator.EQUALS, RecordWorkflowsDefinition.WORKFLOW_TYPE))
+            .withCriteria(new QFilterCriteria("tableName", QCriteriaOperator.EQUALS, "${input.tableName}"))));
 
       //////////////////////////////////////////////////////////////////////////////
       // place workflowId field after scriptId in whatever section scriptId is in //
