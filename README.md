@@ -1,109 +1,150 @@
-# QBit: Workflows
+# qbit-workflows
 
-[![Version](https://img.shields.io/badge/version-TODO-blue.svg)](https://github.com/Kingsrook/qbit-workflows)
-[![License](https://img.shields.io/badge/license-GNU%20Affero%20GPL%20v3-green.svg)](https://www.gnu.org/licenses/agpl-3.0.en.html)
-[![Java](https://img.shields.io/badge/java-17+-blue.svg)](https://adoptium.net/)
+State machine workflows for QQQ applications.
 
-### Overview
-*Note:  This is one of the original QBit implementations - so, some of the mechanics of how
-it is loaded and used by an application are not exactly fully defined at the time of its
-creation... Please excuse any dust or not-quite-round wheels you find here!*
+**For:** QQQ developers building approval flows, order pipelines, or any multi-step business processes  
+**Status:** Stable
 
-This QBit provides TODO
+## Why This Exists
 
-## 🏗️ Architecture
+Business processes have states. Orders go from pending to approved to shipped. Support tickets move through triage, investigation, and resolution. Building these flows means tracking state, validating transitions, and triggering actions at each step.
 
-### Technology Stack
+This QBit provides a declarative workflow engine. Define states and transitions, and the system enforces valid paths, runs actions on transitions, and tracks history automatically.
 
-- **Java**: Java 17+ with UTF-8 encoding
-- **Maven**: Build system with plugin management
-- **QQQ Framework**: Built on the QQQ low-code platform
-- **QBit Pattern**: Follows QBit component architecture
+## Features
 
-### Core Capabilities
+- **State Definitions** - Define allowed states for any entity
+- **Transition Rules** - Control which states can move to which other states
+- **Transition Actions** - Execute code when moving between states
+- **Role-Based Transitions** - Restrict who can trigger which transitions
+- **Transition History** - Automatic audit log of all state changes
+- **Dashboard Integration** - Status badges and transition buttons in the UI
 
-- **Workflow Management**: TODO - Define workflow capabilities
-- **Process Automation**: TODO - Define automation features
-- **Integration**: TODO - Define integration capabilities
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
-- **Java 17+** (required for QQQ features)
-- **Maven 3.8+** (for build system)
+- QQQ application (v0.20+)
+- Database backend configured
 
-### Usage
+### Installation
 
-#### Pom dependency
+Add to your `pom.xml`:
+
 ```xml
 <dependency>
-    <groupId>com.kingsrook.qbits</groupId>
+    <groupId>io.qrun</groupId>
     <artifactId>qbit-workflows</artifactId>
-    <version>${TODO}</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
-#### Setup
-TODO
+### Register the QBit
 
-### Provides
-#### Tables
-TODO
+```java
+public class AppMetaProvider extends QMetaProvider {
+    @Override
+    public void configure(QInstance qInstance) {
+        new WorkflowsQBit().configure(qInstance);
+    }
+}
+```
 
-#### Classes
-TODO
+### Define a Workflow
 
-### Dependencies
-TODO
+```java
+new QWorkflowMetaData()
+    .withName("orderWorkflow")
+    .withTable("order")
+    .withStatusField("status")
+    .withStates(
+        new QWorkflowState("pending", "Pending"),
+        new QWorkflowState("approved", "Approved"),
+        new QWorkflowState("shipped", "Shipped"),
+        new QWorkflowState("cancelled", "Cancelled")
+    )
+    .withTransitions(
+        new QWorkflowTransition("pending", "approved"),
+        new QWorkflowTransition("pending", "cancelled"),
+        new QWorkflowTransition("approved", "shipped"),
+        new QWorkflowTransition("approved", "cancelled")
+    );
+```
 
-## 📚 Documentation
+## Usage
 
-**📖 [Complete Documentation Wiki](https://github.com/Kingsrook/qqq/wiki)** - Start here for comprehensive guides
+### Transition Actions
 
-- **[🏠 Home](https://github.com/Kingsrook/qqq/wiki/Home)** - Project overview and quick start
-- **[🏗️ Architecture](https://github.com/Kingsrook/qqq/wiki/High-Level-Architecture)** - System design and principles
-- **[🔧 Development](https://github.com/Kingsrook/qqq/wiki/Developer-Onboarding)** - Setup and contribution guide
-- **[📦 Modules](https://github.com/Kingsrook/qqq/wiki/Core-Modules)** - Available components and usage
-- **[🚀 Building](https://github.com/Kingsrook/qqq/wiki/Building-Locally)** - Local development workflow
-- **[🔧 QBit Development](https://github.com/Kingsrook/qqq/wiki/QBit-Development)** - QBit development guide
+```java
+new QWorkflowTransition("approved", "shipped")
+    .withAction(new ShipOrderAction());
 
-## 🤝 Contributing
+public class ShipOrderAction implements WorkflowTransitionAction {
+    @Override
+    public void execute(WorkflowTransitionContext context) {
+        // Send shipping notification
+        // Update inventory
+        // Generate tracking number
+    }
+}
+```
 
-**Important**: This repository is a component of the QQQ framework. All contributions, issues, and discussions should go through the main QQQ repository.
+### Role-Based Transitions
 
-### Development Workflow
+```java
+// Only managers can approve
+new QWorkflowTransition("pending", "approved")
+    .withAllowedRoles("manager", "admin");
+```
 
-1. **Fork the main QQQ repository**: https://github.com/Kingsrook/qqq
-2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-3. **Make your changes** (including QBit changes if applicable)
-4. **Run tests**: `mvn test`
-5. **Commit your changes**: `git commit -m 'Add amazing feature'`
-6. **Push to the branch**: `git push origin feature/amazing-feature`
-7. **Open a Pull Request** to the main QQQ repository
+### Transition Validation
 
-### Code Standards
+```java
+new QWorkflowTransition("approved", "shipped")
+    .withValidator((context) -> {
+        if (context.getRecord().getValue("shippingAddress") == null) {
+            throw new WorkflowException("Shipping address required");
+        }
+    });
+```
 
-- **Maven**: Follow Maven best practices
-- **Documentation**: Update relevant documentation
-- **Versioning**: Follow semantic versioning
-- **QBit Pattern**: Follow QBit component architecture
+### Querying by State
 
-**First time contributing?** Start with our [Developer Onboarding Guide](https://github.com/Kingsrook/qqq/wiki/Developer-Onboarding) to get your environment set up.
+```java
+// Find all pending orders
+QueryInput query = new QueryInput()
+    .withTableName("order")
+    .withFilter(new QQueryFilter()
+        .withCriteria("status", Operator.EQUALS, "pending"));
+```
 
-## 🏢 About Kingsrook
+## Configuration
 
-QBit Workflows is built by **[Kingsrook](https://qrun.io)** - making engineers more productive through intelligent automation and developer tools.
+The QBit creates a transition history table automatically:
 
-- **Website**: [https://qrun.io](https://qrun.io)
-- **Contact**: [contact@kingsrook.com](mailto:contact@kingsrook.com)
-- **GitHub**: [https://github.com/Kingsrook](https://github.com/Kingsrook)
+| Table | Purpose |
+|-------|---------|
+| `workflow_transition_log` | Audit trail of all state changes |
 
-## 📄 License
+Each log entry records: record ID, from state, to state, user, timestamp, and optional comments.
 
-This project is licensed under the **GNU Affero General Public License v3.0** - see the [LICENSE.txt](LICENSE.txt) file for details.
+## Project Status
 
----
+Stable and production-ready.
 
-**Ready to build workflows with full control?** [Get started with QQQ today!](https://github.com/Kingsrook/qqq/wiki/Developer-Onboarding)
+### Roadmap
 
+- Parallel state support (multiple active states)
+- Scheduled transitions (auto-expire after N days)
+- Workflow visualization in dashboard
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Run tests: `mvn clean verify`
+4. Submit a pull request
+
+## License
+
+Proprietary - QRun.IO
