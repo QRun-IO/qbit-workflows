@@ -24,7 +24,7 @@ This QBit provides a declarative workflow engine. Define states and transitions,
 
 ### Prerequisites
 
-- QQQ application (v0.20+)
+- QQQ application (v0.35.0+)
 - Database backend configured
 
 ### Installation
@@ -33,9 +33,9 @@ Add to your `pom.xml`:
 
 ```xml
 <dependency>
-    <groupId>io.qrun</groupId>
+    <groupId>com.kingsrook.qbits</groupId>
     <artifactId>qbit-workflows</artifactId>
-    <version>0.2.0</version>
+    <version>0.4.0</version>
 </dependency>
 ```
 
