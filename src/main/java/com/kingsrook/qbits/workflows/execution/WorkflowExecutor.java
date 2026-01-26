@@ -393,7 +393,22 @@ public class WorkflowExecutor extends AbstractQActionBiConsumer<WorkflowInput, W
                Serializable valueAsType = stepOutputClass == null ? link.getConditionValue() : ValueUtils.getValueAsType(stepOutputClass, link.getConditionValue());
                if(Objects.equals(valueAsType, stepOutput))
                {
-                  return link.getToStepNo();
+                  ////////////////////////////////////////////////////////////////////////////////
+                  // a null link to-step no here may (always?) mean that a branch is empty.     //
+                  // but, rather than just returning null, we'll instead break this loop, so we //
+                  // can be sure to hit the check for being inside a container before the end   //
+                  // of this method (which, if we're not in a container, will return null).     //
+                  // see testContainerEndingWithConditionalWithOneEmptySide                     //
+                  ////////////////////////////////////////////////////////////////////////////////
+                  if(link.getToStepNo() != null)
+                  {
+                     return link.getToStepNo();
+                  }
+                  else
+                  {
+                     LOG.debug("Found link with condition value matching stepOutput, but no toStepNo - this may be expected for an empty branch within a container?", logPair("fromStepNo", link.getFromStepNo()), logPair("condition", link.getConditionValue()));
+                     break;
+                  }
                }
             }
             catch(Exception e)
