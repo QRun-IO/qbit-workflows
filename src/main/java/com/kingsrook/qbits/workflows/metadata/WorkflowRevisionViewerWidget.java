@@ -32,7 +32,7 @@ import com.kingsrook.qqq.backend.core.utils.ValueUtils;
  *******************************************************************************/
 public class WorkflowRevisionViewerWidget extends BaseQSequentialWorkflowWidgetRenderer
 {
-   public static final String NAME = "WorkflowRunLogViewer";
+   public static final String NAME = "WorkflowRevisionViewerWidget";
 
 
 
