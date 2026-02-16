@@ -73,6 +73,7 @@
       <dependency>
          <groupId>com.kingsrook.qqq</groupId>
          <artifactId>qqq-backend-core</artifactId>
+         <version>0.40.0-join-enhancements-24cb9791-20260216.220349-1</version>
       </dependency>
       <dependency>
          <groupId>com.kingsrook.qqq</groupId>
