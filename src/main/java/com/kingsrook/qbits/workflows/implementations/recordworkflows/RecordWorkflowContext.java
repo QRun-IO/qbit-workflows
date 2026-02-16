@@ -25,24 +25,16 @@ package com.kingsrook.qbits.workflows.implementations.recordworkflows;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import com.google.gson.reflect.TypeToken;
+import com.kingsrook.qbits.workflows.execution.LazyInitObjectInWorkflowContext;
 import com.kingsrook.qbits.workflows.execution.ObjectInWorkflowContext;
 import com.kingsrook.qbits.workflows.execution.WorkflowExecutionContext;
-import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
-import com.kingsrook.qqq.backend.core.exceptions.QException;
-import com.kingsrook.qqq.backend.core.model.actions.tables.query.QCriteriaOperator;
-import com.kingsrook.qqq.backend.core.model.actions.tables.query.QFilterCriteria;
-import com.kingsrook.qqq.backend.core.model.actions.tables.query.QQueryFilter;
 import com.kingsrook.qqq.backend.core.model.actions.tables.query.QueryJoin;
 import com.kingsrook.qqq.backend.core.model.data.QRecord;
 import com.kingsrook.qqq.backend.core.model.data.QRecordEntity;
-import com.kingsrook.qqq.backend.core.model.metadata.joins.JoinOn;
-import com.kingsrook.qqq.backend.core.utils.CollectionUtils;
 
 
 /*******************************************************************************
@@ -57,17 +49,43 @@ public class RecordWorkflowContext extends WorkflowExecutionContext
    public final ObjectInWorkflowContext<HashMap<String, ArrayList<QRecord>>>    recordsToInsert     = new ObjectInWorkflowContext<>(this, "recordsToInsert", new HashMap<>());
    public final ObjectInWorkflowContext<HashMap<String, HashSet<Serializable>>> primaryKeysToDelete = new ObjectInWorkflowContext<>(this, "primaryKeysToDelete", new HashMap<>());
 
-   ///////////////////////////////////////////////////////////////////////////////////////////
-   // records already stored in the backend that are joined with the main record.           //
-   // should only be accessed via the getRelatedRecords method, which lazy inits (by query) //
-   ///////////////////////////////////////////////////////////////////////////////////////////
-   private final ObjectInWorkflowContext<HashMap<JoinKey, ArrayList<QRecord>>> joinRecords = new ObjectInWorkflowContext<>(this, "joinRecords", new HashMap<>());
+   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+   // records already stored in the backend that are joined with the main record - they used to be stored in a map kept //
+   // right here, but they've migrated into the RecordWorkflowContextJoinedRecordHelper.                                //
+   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+   public final ObjectInWorkflowContext<RecordWorkflowContextJoinedRecordHelper> recordWorkflowContextJoinedRecordHelper = new LazyInitObjectInWorkflowContext<>(this, "recordWorkflowContextJoinedRecordHelper", () -> newRecordWorkflowContextJoinedRecordHelper(this));
 
 
 
-   private record JoinKey(String joinName, ArrayList<Serializable> joinValues)
+   /***************************************************************************
+    * Construct a new RecordWorkflowContextJoinedRecordHelper, which uses this
+    * context class's members to get the list of records to insert and the
+    * set of ids to delete
+    ***************************************************************************/
+   private RecordWorkflowContextJoinedRecordHelper newRecordWorkflowContextJoinedRecordHelper(RecordWorkflowContext recordWorkflowContext)
    {
+      return new RecordWorkflowContextJoinedRecordHelper(getWorkflow().getTableName(), record.get())
+      {
+         /***************************************************************************
+          *
+          ***************************************************************************/
+         @Override
+         public List<QRecord> getRecordsToInsert(String tableName)
+         {
+            return recordWorkflowContext.recordsToInsert.get().computeIfAbsent(tableName, (k) -> new ArrayList<>());
+         }
 
+
+
+         /***************************************************************************
+          *
+          ***************************************************************************/
+         @Override
+         public Set<Serializable> getPrimaryKeysToDelete(String tableName)
+         {
+            return recordWorkflowContext.primaryKeysToDelete.get().computeIfAbsent(tableName, (k) -> new HashSet<>());
+         }
+      };
    }
 
 
@@ -147,81 +165,11 @@ public class RecordWorkflowContext extends WorkflowExecutionContext
 
 
    /***************************************************************************
-    *
+    * allow join-records, which are normally managed by the recordWorkflowContextJoinedRecordHelper
+    * to be explicitly set in that object.  Useful for test scenarios, maybe more.
     ***************************************************************************/
-   public List<QRecord> getJoinRecords(QueryJoin queryJoin) throws QException
+   public void setJoinRecords(QueryJoin queryJoin, List<QRecord> associatedRecords)
    {
-      JoinRecordsKeyConstruction result = getJoinRecordsKeyConstruction(queryJoin, record.get());
-      if(joinRecords.get().get(result.key()) == null)
-      {
-         ArrayList<QRecord> records = CollectionUtils.useOrWrap(result.makeEmpty() ? Collections.emptyList() : QueryAction.execute(queryJoin.getJoinTable(), result.filter()), new TypeToken<>() {});
-         joinRecords.get().put(result.key(), records);
-      }
-      return joinRecords.get().get(result.key());
-   }
-
-
-
-   /***************************************************************************
-    *
-    ***************************************************************************/
-   private JoinRecordsKeyConstruction getJoinRecordsKeyConstruction(QueryJoin queryJoin, QRecord mainRecord)
-   {
-      ArrayList<Serializable> joinValues    = new ArrayList<>();
-      JoinKey                 key           = new JoinKey(queryJoin.getJoinMetaData().getName(), joinValues);
-      String                  baseTableName = getWorkflow().getTableName();
-
-      QQueryFilter filter    = new QQueryFilter();
-      boolean      makeEmpty = false;
-
-      for(JoinOn joinOn : queryJoin.getJoinMetaData().getJoinOns())
-      {
-         Serializable mainTableValue;
-         String       joinTableField;
-         if(queryJoin.getJoinMetaData().getLeftTable().equals(baseTableName))
-         {
-            mainTableValue = mainRecord.getValue(joinOn.getLeftField());
-            joinTableField = joinOn.getRightField();
-         }
-         else
-         {
-            mainTableValue = mainRecord.getValue(joinOn.getRightField());
-            joinTableField = joinOn.getLeftField();
-         }
-
-         key.joinValues.add(mainTableValue);
-
-         if(mainTableValue == null)
-         {
-            // throw (new QException("Missing join value in " + baseTableName + " getting related " + tableName + " records"));
-            makeEmpty = true;
-         }
-
-         filter.addCriteria(new QFilterCriteria(joinTableField, QCriteriaOperator.EQUALS, mainTableValue));
-      }
-      JoinRecordsKeyConstruction result = new JoinRecordsKeyConstruction(key, filter, makeEmpty);
-      return result;
-   }
-
-
-
-   /***************************************************************************
-    *
-    ***************************************************************************/
-   private record JoinRecordsKeyConstruction(JoinKey key, QQueryFilter filter, boolean makeEmpty)
-   {
-
-   }
-
-
-
-   /***************************************************************************
-    *
-    ***************************************************************************/
-   public void setJoinRecords(QueryJoin queryJoin, QRecord mainRecord, List<QRecord> records)
-   {
-      ArrayList<QRecord>         recordArrayList = CollectionUtils.useOrWrap(records, new TypeToken<>() {});
-      JoinRecordsKeyConstruction result          = getJoinRecordsKeyConstruction(queryJoin, mainRecord);
-      joinRecords.get().put(result.key(), recordArrayList);
+      recordWorkflowContextJoinedRecordHelper.get().setJoinRecords(queryJoin, associatedRecords);
    }
 }

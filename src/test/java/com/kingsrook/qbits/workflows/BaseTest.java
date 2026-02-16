@@ -136,7 +136,7 @@ public class BaseTest
    /***************************************************************************
     **
     ***************************************************************************/
-   private QInstance defineQInstance() throws QException
+   protected QInstance defineQInstance() throws QException
    {
       /////////////////////////////////////
       // basic definition of an instance //
