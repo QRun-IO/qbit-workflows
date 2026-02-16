@@ -299,9 +299,9 @@ public class InputRecordFilterStep extends WorkflowStepType implements WorkflowS
       }
 
       List<QRecordWithJoinedRecords> newCrossProduct = new ArrayList<>();
-      for(QRecordWithJoinedRecords orderWithJoinedRecord : recordsWithJoinedRecords)
+      for(QRecordWithJoinedRecords recordWithJoinedRecord : recordsWithJoinedRecords)
       {
-         newCrossProduct.addAll(orderWithJoinedRecord.buildCrossProduct(joinTableName, joinRecordsToCross));
+         newCrossProduct.addAll(recordWithJoinedRecord.buildCrossProduct(joinTableName, joinRecordsToCross));
       }
       recordsWithJoinedRecords = newCrossProduct;
 

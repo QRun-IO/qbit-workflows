@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import com.google.gson.reflect.TypeToken;
 import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
@@ -132,13 +133,13 @@ public class RecordWorkflowContextJoinedRecordHelper implements Serializable
       }
       else
       {
-         baseRecords = joinRecords.get(queryJoin.getBaseTableOrAlias());
+         baseRecords = Objects.requireNonNullElseGet(joinRecords.get(queryJoin.getBaseTableOrAlias()), ArrayList::new);
       }
 
       QQueryFilter joinRecordsFilter = getJoinRecordsFilter(queryJoin, baseRecords);
       if(joinRecords.get(joinTableOrAlias) == null)
       {
-         List<QRecord> records = QueryAction.execute(queryJoin.getJoinTable(), joinRecordsFilter);
+         List<QRecord> records = joinRecordsFilter == null ? Collections.emptyList() : QueryAction.execute(queryJoin.getJoinTable(), joinRecordsFilter);
          joinRecords.put(joinTableOrAlias, records);
       }
 
@@ -153,13 +154,20 @@ public class RecordWorkflowContextJoinedRecordHelper implements Serializable
     *
     * <p>Note that this will potentially be a (a=? AND b=?) OR (a=? AND b=?)
     * style query... </p>
+    *
+    * @return filter to find join records - or - null if there should be no
+    * join records returned (e.g., empty base record list).
     ***************************************************************************/
    protected QQueryFilter getJoinRecordsFilter(QueryJoin queryJoin, List<QRecord> baseRecords)
    {
       String baseTableName = queryJoin.getBaseTableOrAlias();
 
-      QQueryFilter filter = new QQueryFilter().withBooleanOperator(QQueryFilter.BooleanOperator.OR);
+      if(CollectionUtils.nullSafeIsEmpty(baseRecords))
+      {
+         return (null);
+      }
 
+      QQueryFilter filter = new QQueryFilter().withBooleanOperator(QQueryFilter.BooleanOperator.OR);
       for(QRecord baseRecord : baseRecords)
       {
          QQueryFilter subFilter = new QQueryFilter();
