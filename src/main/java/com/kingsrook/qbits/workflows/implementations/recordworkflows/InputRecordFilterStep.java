@@ -25,8 +25,10 @@ package com.kingsrook.qbits.workflows.implementations.recordworkflows;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import com.kingsrook.qbits.workflows.definition.OutboundLinkMode;
 import com.kingsrook.qbits.workflows.definition.OutboundLinkOption;
 import com.kingsrook.qbits.workflows.definition.WorkflowStepType;
@@ -54,6 +56,7 @@ import com.kingsrook.qqq.backend.core.model.metadata.code.QCodeReference;
 import com.kingsrook.qqq.backend.core.model.metadata.fields.QFieldMetaData;
 import com.kingsrook.qqq.backend.core.modules.backend.implementations.utils.BackendQueryFilterUtils;
 import com.kingsrook.qqq.backend.core.utils.CollectionUtils;
+import com.kingsrook.qqq.backend.core.utils.StringUtils;
 
 
 /*******************************************************************************
@@ -106,8 +109,10 @@ public class InputRecordFilterStep extends WorkflowStepType implements WorkflowS
     **
     ***************************************************************************/
    @Override
-   public WorkflowStepOutput execute(WorkflowStep step, Map<String, Serializable> inputValues, WorkflowExecutionContext context) throws QException
+   public WorkflowStepOutput execute(WorkflowStep step, Map<String, Serializable> inputValues, WorkflowExecutionContext workflowExecutionContext) throws QException
    {
+      RecordWorkflowContext context = (RecordWorkflowContext) workflowExecutionContext;
+
       QRecord record = (QRecord) context.getValues().get("record");
       if(record == null)
       {
@@ -130,26 +135,38 @@ public class InputRecordFilterStep extends WorkflowStepType implements WorkflowS
       ///////////////////////////////////////////////////////////////////////////////
       filter.applyCriteriaOptionToAllCriteria(CriteriaOption.CASE_INSENSITIVE);
 
-      List<QRecordWithJoinedRecords> recordWithJoins = buildCrossProduct(record, filter, context);
+      List<QRecordWithJoinedRecords> recordWithJoins = buildCrossProduct(record, filter, context.recordWorkflowContextJoinedRecordHelper.get());
       return evaluateCrossProduct(recordWithJoins, filter);
    }
 
 
 
    /***************************************************************************
+    * For a given record, and a filter, and a {@link RecordWorkflowContextJoinedRecordHelper}
+    * object from a live workflow context, build a List of {@link QRecordWithJoinedRecords}
+    * that can be used to evaluate if a record (with joins) matches a filter.
     *
+    * <p>Note that this method is public, and called by application-defined workflows.
+    * In other words, this method is part of our published API in here!</p>
+    *
+    * @param record the main record in the workflow
+    * @param filter the filter which may have joins (thus the need for a cross-product)
+    * @param joinedRecordHelper object from context of the workflow that knows
+    *                           about cached join records and records being inserted
+    *                           and/or deleted.
+    * @return {@code List<QRecordWithJoinedRecords>} the cross product that the
+    * filter should be evaluated against.
     ***************************************************************************/
-   public List<QRecordWithJoinedRecords> buildCrossProduct(QRecord record, QQueryFilter filter, WorkflowExecutionContext workflowExecutionContext) throws QException
+   public static List<QRecordWithJoinedRecords> buildCrossProduct(QRecord record, QQueryFilter filter, RecordWorkflowContextJoinedRecordHelper joinedRecordHelper) throws QException
    {
-      RecordWorkflowContext context = (RecordWorkflowContext) workflowExecutionContext;
-
       List<QRecordWithJoinedRecords> crossProduct = new ArrayList<>();
       crossProduct.add(new QRecordWithJoinedRecords(record));
 
-      List<QueryJoin> joinsInFilter = BackendQueryFilterUtils.identifyJoinsInFilter(context.getWorkflow().getTableName(), filter);
+      List<QueryJoin> joinsInFilter = BackendQueryFilterUtils.identifyJoinsInFilter(joinedRecordHelper.getTableName(), filter);
+      joinsInFilter = sortQueryJoinsFromMainTableOutward(joinedRecordHelper.getTableName(), joinsInFilter);
       for(QueryJoin join : joinsInFilter)
       {
-         crossProduct = expandCrossProductViaJoin(crossProduct, join, context);
+         crossProduct = expandCrossProductViaJoin(crossProduct, join, joinedRecordHelper);
       }
 
       return crossProduct;
@@ -157,16 +174,96 @@ public class InputRecordFilterStep extends WorkflowStepType implements WorkflowS
 
 
 
+   /*******************************************************************************
+    * Sort the query joins so that they fan outward from the main table to ones
+    * farther away.
+    *
+    * <p>This is so, if we've got a -> b -> c -- we'll process 'b' before 'c',
+    * as we need the records in 'b' to find the records in 'c'.</p>
+    *
+    * <p><i>Note that this method was copied from {@code AbstractRDBMSAction}</i></p>
+    *******************************************************************************/
+   private static List<QueryJoin> sortQueryJoinsFromMainTableOutward(String mainTableName, List<QueryJoin> queryJoins)
+   {
+      List<QueryJoin> rs = new ArrayList<>();
+
+      ////////////////////////////////////////////////////////////////////////////////
+      // make a copy of the input list that we can feel safe removing elements from //
+      ////////////////////////////////////////////////////////////////////////////////
+      List<QueryJoin> inputListCopy = new ArrayList<>(queryJoins);
+
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+      // keep track of the tables (or aliases) that we've seen - that's what we'll "grow" outward from //
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+      Set<String> seenTablesOrAliases = new HashSet<>();
+      seenTablesOrAliases.add(mainTableName);
+
+      ////////////////////////////////////////////////////////////////////////////////////
+      // loop as long as there are more tables in the inputList, and the keepGoing flag //
+      // is set (e.g., indicating that we added something in the last iteration)        //
+      ////////////////////////////////////////////////////////////////////////////////////
+      boolean keepGoing = true;
+      while(!inputListCopy.isEmpty() && keepGoing)
+      {
+         keepGoing = false;
+
+         Iterator<QueryJoin> iterator = inputListCopy.iterator();
+         while(iterator.hasNext())
+         {
+            QueryJoin nextQueryJoin = iterator.next();
+
+            //////////////////////////////////////////////////////////////////////////
+            // get the baseTableOrAlias from this join - and if it isn't set in the //
+            // QueryJoin, then get it from the left-side of the join's metaData     //
+            //////////////////////////////////////////////////////////////////////////
+            String baseTableOrAlias = nextQueryJoin.getBaseTableOrAlias();
+            if(baseTableOrAlias == null && nextQueryJoin.getJoinMetaData() != null)
+            {
+               baseTableOrAlias = nextQueryJoin.getJoinMetaData().getLeftTable();
+            }
+
+            //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // if we have a baseTableOrAlias (would we ever not?), and we've seen it before - OR - we've seen this query join's joinTableOrAlias,   //
+            // then we can add this pair of namesOrAliases to our seen-set, remove this queryJoin from the inputListCopy (iterator), and keep going //
+            //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            if((StringUtils.hasContent(baseTableOrAlias) && seenTablesOrAliases.contains(baseTableOrAlias)) || seenTablesOrAliases.contains(nextQueryJoin.getJoinTableOrItsAlias()))
+            {
+               rs.add(nextQueryJoin);
+               if(StringUtils.hasContent(baseTableOrAlias))
+               {
+                  seenTablesOrAliases.add(baseTableOrAlias);
+               }
+
+               seenTablesOrAliases.add(nextQueryJoin.getJoinTableOrItsAlias());
+               iterator.remove();
+               keepGoing = true;
+            }
+         }
+      }
+
+      ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // in case any are left, add them all here - does this ever happen?                                          //
+      // the only time a conditional breakpoint here fires in the RDBMS test suite, is in query designed to throw. //
+      ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      rs.addAll(inputListCopy);
+
+      return (rs);
+   }
+
+
+
+
+
    /***************************************************************************
     *
     ***************************************************************************/
-   private static List<QRecordWithJoinedRecords> expandCrossProductViaJoin(List<QRecordWithJoinedRecords> orderWithJoinedRecords, QueryJoin queryJoin, RecordWorkflowContext context) throws QException
+   private static List<QRecordWithJoinedRecords> expandCrossProductViaJoin(List<QRecordWithJoinedRecords> recordWithJoinedRecords, QueryJoin queryJoin, RecordWorkflowContextJoinedRecordHelper joinedRecordHelper) throws QException
    {
-      String                joinTableName           = queryJoin.getJoinTable();
-      ArrayList<QRecord>    recordsToBeInserted     = context.recordsToInsert.get().computeIfAbsent(joinTableName, k -> new ArrayList<>());
-      List<QRecord>         recordsAlreadyInBackend = context.getJoinRecords(queryJoin);
-      HashSet<Serializable> idsToDelete             = context.primaryKeysToDelete.get().computeIfAbsent(joinTableName, k -> new HashSet<>());
-      String                primaryKeyField         = QContext.getQInstance().getTable(joinTableName).getPrimaryKeyField();
+      String            joinTableName           = queryJoin.getJoinTable();
+      List<QRecord>     recordsToBeInserted     = joinedRecordHelper.getRecordsToInsert(joinTableName);
+      List<QRecord>     recordsAlreadyInBackend = joinedRecordHelper.getJoinRecords(queryJoin);
+      Set<Serializable> idsToDelete             = joinedRecordHelper.getPrimaryKeysToDelete(joinTableName);
+      String            primaryKeyField         = QContext.getQInstance().getTable(joinTableName).getPrimaryKeyField();
 
       //////////////////////////////////////////////////////////////////////////////////////////////////////
       // add records that already existed to the cross product, filtering out ones that are to be deleted //
@@ -185,8 +282,8 @@ public class InputRecordFilterStep extends WorkflowStepType implements WorkflowS
       ////////////////////////////////////
       CollectionUtils.addAllIfNotNull(recordsToCross, recordsToBeInserted);
 
-      orderWithJoinedRecords = makeCrossProduct(orderWithJoinedRecords, joinTableName, recordsToCross);
-      return orderWithJoinedRecords;
+      recordWithJoinedRecords = makeCrossProduct(recordWithJoinedRecords, joinTableName, recordsToCross);
+      return recordWithJoinedRecords;
    }
 
 
@@ -194,18 +291,21 @@ public class InputRecordFilterStep extends WorkflowStepType implements WorkflowS
    /***************************************************************************
     *
     ***************************************************************************/
-   private static List<QRecordWithJoinedRecords> makeCrossProduct(List<QRecordWithJoinedRecords> orderWithJoinedRecords, String joinTableName, List<QRecord> joinRecodsToCross)
+   private static List<QRecordWithJoinedRecords> makeCrossProduct(List<QRecordWithJoinedRecords> recordsWithJoinedRecords, String joinTableName, List<QRecord> joinRecordsToCross)
    {
-      if(!joinRecodsToCross.isEmpty())
+      if(recordsWithJoinedRecords.isEmpty() || joinRecordsToCross.isEmpty())
       {
-         List<QRecordWithJoinedRecords> newCrossProduct = new ArrayList<>();
-         for(QRecordWithJoinedRecords orderWithJoinedRecord : orderWithJoinedRecords)
-         {
-            newCrossProduct.addAll(orderWithJoinedRecord.buildCrossProduct(joinTableName, joinRecodsToCross));
-         }
-         orderWithJoinedRecords = newCrossProduct;
+         return new ArrayList<>();
       }
-      return orderWithJoinedRecords;
+
+      List<QRecordWithJoinedRecords> newCrossProduct = new ArrayList<>();
+      for(QRecordWithJoinedRecords recordWithJoinedRecord : recordsWithJoinedRecords)
+      {
+         newCrossProduct.addAll(recordWithJoinedRecord.buildCrossProduct(joinTableName, joinRecordsToCross));
+      }
+      recordsWithJoinedRecords = newCrossProduct;
+
+      return recordsWithJoinedRecords;
    }
 
 

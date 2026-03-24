@@ -116,9 +116,10 @@ public class RecordWorkflowTypeTester implements WorkflowTypeTesterInterface
 
             QueryJoin queryJoin = new QueryJoin()
                .withJoinTable(associatedTableName)
+               .withBaseTableOrAlias(tableName)
                .withJoinMetaData(QContext.getQInstance().getJoin(association.get().getJoinName()));
 
-            recordWorkflowContext.setJoinRecords(queryJoin, inputRecord, associatedRecords);
+            recordWorkflowContext.setJoinRecords(queryJoin, associatedRecords);
          }
       }
    }
@@ -198,6 +199,12 @@ public class RecordWorkflowTypeTester implements WorkflowTypeTesterInterface
    {
       RecordWorkflowContext context = (RecordWorkflowContext) workflowOutput.getContext();
 
+      /////////////////////////////////////////////////////////////////////////////////////////////////
+      // reset the pre-looked up joins in this object (since after the workflow is complete, records //
+      // will be stored, which wouldn't have been before, so it might have cached old record lists.) //
+      /////////////////////////////////////////////////////////////////////////////////////////////////
+      context.recordWorkflowContextJoinedRecordHelper.get().reset();
+
       QRecord record = getRecordForTestAssertionFilter(workflowOutput, assertion);
       if(record == null)
       {
@@ -210,7 +217,7 @@ public class RecordWorkflowTypeTester implements WorkflowTypeTesterInterface
       // re-use the order filtering logic of InputRecordFilterStep (e.g., building joins) //
       //////////////////////////////////////////////////////////////////////////////////////
       InputRecordFilterStep          inputRecordFilterStep  = new InputRecordFilterStep();
-      List<QRecordWithJoinedRecords> orderWithJoinedRecords = inputRecordFilterStep.buildCrossProduct(record, filter, context);
+      List<QRecordWithJoinedRecords> orderWithJoinedRecords = InputRecordFilterStep.buildCrossProduct(record, filter, context.recordWorkflowContextJoinedRecordHelper.get());
       WorkflowStepOutput             workflowStepOutput     = inputRecordFilterStep.evaluateCrossProduct(orderWithJoinedRecords, filter);
       return (Objects.equals(workflowStepOutput.outputData(), true));
 
