@@ -31,6 +31,7 @@ import com.kingsrook.qbits.workflows.execution.WorkflowExecutionContext;
 import com.kingsrook.qbits.workflows.model.Workflow;
 import com.kingsrook.qbits.workflows.model.WorkflowRevision;
 import com.kingsrook.qqq.api.actions.GetTableApiFieldsAction;
+import com.kingsrook.qqq.api.model.actions.GetTableApiFieldsInput;
 import com.kingsrook.qqq.api.utils.ApiQueryFilterUtils;
 import com.kingsrook.qqq.backend.core.actions.tables.CountAction;
 import com.kingsrook.qqq.backend.core.actions.tables.DeleteAction;
@@ -189,7 +190,7 @@ public class RecordWorkflowUtils
    {
       WorkflowRevision            workflowRevision   = context.getWorkflowRevision();
       Workflow                    workflow           = context.getWorkflow();
-      Map<String, QFieldMetaData> tableApiFields     = GetTableApiFieldsAction.getTableApiFieldMap(new GetTableApiFieldsAction.ApiNameVersionAndTableName(workflowRevision.getApiName(), workflowRevision.getApiVersion(), workflow.getTableName()));
+      Map<String, QFieldMetaData> tableApiFields     = GetTableApiFieldsAction.getTableApiFieldMap(new GetTableApiFieldsInput().withApiName(workflowRevision.getApiName()).withVersion(workflowRevision.getApiVersion()).withTableName(workflow.getTableName()));
       List<String>                badRequestMessages = new ArrayList<>();
 
       CountInput countInput = new CountInput(context.getWorkflow().getTableName())

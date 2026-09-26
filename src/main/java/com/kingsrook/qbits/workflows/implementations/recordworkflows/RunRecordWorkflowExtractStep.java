@@ -78,10 +78,10 @@ public class RunRecordWorkflowExtractStep extends ExtractViaQueryStep
     ** Make sure associations are fetched (so api records have children!)
     *******************************************************************************/
    @Override
-   protected void customizeInputPreQuery(QueryInput queryInput)
+   protected void customizeInputPreQuery(RunBackendStepInput runBackendStepInput, QueryInput queryInput)
    {
-      super.customizeInputPreQuery(queryInput);
       queryInput.setIncludeAssociations(true);
+      super.customizeInputPreQuery(runBackendStepInput, queryInput);
    }
 
 }

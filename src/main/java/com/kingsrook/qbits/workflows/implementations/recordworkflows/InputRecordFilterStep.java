@@ -41,6 +41,7 @@ import com.kingsrook.qbits.workflows.model.Workflow;
 import com.kingsrook.qbits.workflows.model.WorkflowRevision;
 import com.kingsrook.qbits.workflows.model.WorkflowStep;
 import com.kingsrook.qqq.api.actions.GetTableApiFieldsAction;
+import com.kingsrook.qqq.api.model.actions.GetTableApiFieldsInput;
 import com.kingsrook.qqq.api.utils.ApiQueryFilterUtils;
 import com.kingsrook.qqq.backend.core.actions.tables.GetAction;
 import com.kingsrook.qqq.backend.core.context.QContext;
@@ -354,7 +355,7 @@ public class InputRecordFilterStep extends WorkflowStepType implements WorkflowS
             String                      apiName            = workflowRevision.getValueString("apiName");
             String                      apiVersion         = workflowRevision.getValueString("apiVersion");
             String                      tableName          = workflow.getValueString("tableName");
-            Map<String, QFieldMetaData> tableApiFields     = GetTableApiFieldsAction.getTableApiFieldMap(new GetTableApiFieldsAction.ApiNameVersionAndTableName(apiName, apiVersion, tableName));
+            Map<String, QFieldMetaData> tableApiFields     = GetTableApiFieldsAction.getTableApiFieldMap(new GetTableApiFieldsInput().withApiName(apiName).withVersion(apiVersion).withTableName(tableName));
             ArrayList<String>           badRequestMessages = new ArrayList<>();
             ApiQueryFilterUtils.manageCriteriaFields(filter, tableApiFields, badRequestMessages, apiName, apiVersion, new QueryInput(tableName).withFilter(filter));
             errors.addAll(badRequestMessages);
