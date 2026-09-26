@@ -42,6 +42,7 @@ import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.actions.tables.QueryAction;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
 import com.kingsrook.qqq.backend.core.model.actions.processes.ProcessSummaryLineInterface;
+import com.kingsrook.qqq.backend.core.model.actions.processes.RunBackendStepInput;
 import com.kingsrook.qqq.backend.core.model.actions.processes.RunProcessInput;
 import com.kingsrook.qqq.backend.core.model.actions.processes.RunProcessOutput;
 import com.kingsrook.qqq.backend.core.model.actions.processes.Status;
@@ -205,6 +206,19 @@ class RunRecordWorkflowProcessTest extends BaseTest
          QRecord updatedPerson = GetAction.execute(TABLE_NAME_PERSON, personId);
          assertEquals(47, updatedPerson.getValueInteger("noOfShoes"));
       }
+   }
+
+
+
+   /*******************************************************************************
+    ** the extract step must fetch associations (so api records have children).
+    *******************************************************************************/
+   @Test
+   void testExtractStepIncludesAssociations()
+   {
+      QueryInput queryInput = new QueryInput(Workflow.TABLE_NAME);
+      new RunRecordWorkflowExtractStep().customizeInputPreQuery(new RunBackendStepInput(), queryInput);
+      assertTrue(queryInput.getIncludeAssociations());
    }
 
 

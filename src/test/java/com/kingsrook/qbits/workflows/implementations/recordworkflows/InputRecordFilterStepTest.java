@@ -24,11 +24,13 @@ package com.kingsrook.qbits.workflows.implementations.recordworkflows;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import com.kingsrook.qbits.workflows.BaseTest;
 import com.kingsrook.qbits.workflows.execution.WorkflowStepOutput;
 import com.kingsrook.qbits.workflows.model.Workflow;
+import com.kingsrook.qbits.workflows.model.WorkflowRevision;
 import com.kingsrook.qbits.workflows.model.WorkflowStep;
 import com.kingsrook.qqq.backend.core.actions.tables.InsertAction;
 import com.kingsrook.qqq.backend.core.exceptions.QException;
@@ -45,6 +47,7 @@ import static com.kingsrook.qbits.workflows.CompanyHierarchyTablesAndJoinsMetaDa
 import static com.kingsrook.qbits.workflows.CompanyHierarchyTablesAndJoinsMetaDataProducer.EMPLOYEE_TABLE;
 import static com.kingsrook.qbits.workflows.CompanyHierarchyTablesAndJoinsMetaDataProducer.JOB_HISTORY_TABLE;
 import static com.kingsrook.qbits.workflows.CompanyHierarchyTablesAndJoinsMetaDataProducer.JOB_TITLE_TABLE;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 
@@ -74,6 +77,43 @@ class InputRecordFilterStepTest extends BaseTest
       assertOutput(false, EMPLOYEE_TABLE, idEquals1, new QRecord());
       assertOutput(false, EMPLOYEE_TABLE, idEquals1, Map.of("id", 2));
       assertOutput(true, EMPLOYEE_TABLE, idEquals1, Map.of("id", 1));
+   }
+
+
+
+   /*******************************************************************************
+    ** with an api version on the revision, filter fields are api field names -
+    ** v1's shoeCount was replaced by the backend's noOfShoes.
+    *******************************************************************************/
+   @Test
+   void testFilterUsingApiFieldNames() throws QException
+   {
+      WorkflowRevision workflowRevisionV1 = new WorkflowRevision().withApiName(API_NAME).withApiVersion(V1);
+      QQueryFilter     shoeCountIs47      = new QQueryFilter().withCriteria("shoeCount", QCriteriaOperator.EQUALS, 47);
+
+      assertOutput(true, TABLE_NAME_PERSON, shoeCountIs47, workflowRevisionV1, Map.of("id", 1, "noOfShoes", 47));
+      assertOutput(false, TABLE_NAME_PERSON, shoeCountIs47, workflowRevisionV1, Map.of("id", 1, "noOfShoes", 3));
+   }
+
+
+
+   /*******************************************************************************
+    ** validation checks filter fields against the api version's fields.
+    *******************************************************************************/
+   @Test
+   void testValidateUsingApiFieldNames() throws QException
+   {
+      QRecord workflowRevisionV1 = new WorkflowRevision().withApiName(API_NAME).withApiVersion(V1).toQRecord();
+      QRecord workflow           = new Workflow().withTableName(TABLE_NAME_PERSON).toQRecord();
+
+      assertThat(runValidate(new QQueryFilter().withCriteria("shoeCount", QCriteriaOperator.EQUALS, 47), workflowRevisionV1, workflow))
+         .isEmpty();
+
+      /////////////////////////////////////////
+      // noOfShoes only joined the api in v2 //
+      /////////////////////////////////////////
+      assertThat(runValidate(new QQueryFilter().withCriteria("noOfShoes", QCriteriaOperator.EQUALS, 47), workflowRevisionV1, workflow))
+         .containsExactly("Unrecognized criteria field name: noOfShoes.");
    }
 
 
@@ -478,9 +518,19 @@ class InputRecordFilterStepTest extends BaseTest
     ***************************************************************************/
    void assertOutput(boolean expectedOutput, String tableName, QQueryFilter filter, Map<String, Serializable> recordValues) throws QException
    {
+      assertOutput(expectedOutput, tableName, filter, null, recordValues);
+   }
+
+
+
+   /***************************************************************************
+    *
+    ***************************************************************************/
+   void assertOutput(boolean expectedOutput, String tableName, QQueryFilter filter, WorkflowRevision workflowRevision, Map<String, Serializable> recordValues) throws QException
+   {
       QRecord record = new QRecord();
       record.setValues(recordValues);
-      assertOutput(expectedOutput, tableName, filter, record);
+      assertOutput(expectedOutput, tableName, filter, workflowRevision, record);
    }
 
 
@@ -490,15 +540,39 @@ class InputRecordFilterStepTest extends BaseTest
     ***************************************************************************/
    void assertOutput(boolean expectedOutput, String tableName, QQueryFilter filter, QRecord record) throws QException
    {
+      assertOutput(expectedOutput, tableName, filter, null, record);
+   }
+
+
+
+   /***************************************************************************
+    *
+    ***************************************************************************/
+   void assertOutput(boolean expectedOutput, String tableName, QQueryFilter filter, WorkflowRevision workflowRevision, QRecord record) throws QException
+   {
       WorkflowStep              step        = new WorkflowStep();
       Map<String, Serializable> inputValues = Map.of("queryFilterJson", JsonUtils.toJson(filter));
 
       RecordWorkflowContext context = new RecordWorkflowContext();
       context.setWorkflow(new Workflow().withTableName(tableName));
+      context.setWorkflowRevision(workflowRevision);
       context.record.set(record);
       record.setTableName(tableName);
 
       WorkflowStepOutput stepOutput = new InputRecordFilterStep().execute(step, inputValues, context);
       assertEquals(expectedOutput, stepOutput.outputData());
+   }
+
+
+
+   /***************************************************************************
+    *
+    ***************************************************************************/
+   private List<String> runValidate(QQueryFilter filter, QRecord workflowRevision, QRecord workflow) throws QException
+   {
+      List<String>              errors      = new ArrayList<>();
+      Map<String, Serializable> inputValues = Map.of("queryFilterJson", JsonUtils.toJson(filter));
+      new InputRecordFilterStep().validate(new WorkflowStep(), inputValues, workflowRevision, workflow, errors);
+      return (errors);
    }
 }
