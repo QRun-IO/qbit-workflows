@@ -24,7 +24,7 @@ This QBit provides a declarative workflow engine. Define states and transitions,
 
 ### Prerequisites
 
-- QQQ application (v0.35.0+)
+- QQQ application (v4.0.0+)
 - Database backend configured
 
 ### Installation
