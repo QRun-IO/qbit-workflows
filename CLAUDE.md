@@ -20,5 +20,5 @@ Key facts from the review (see dossier for detail):
   parent 1.5.1.
 - README and CHANGELOG.md do not describe this codebase (template rot) — trust the
   source and the dossier instead.
-- Licensing is inconsistent (LICENSE/NOTICE Apache-2.0 vs pom + file headers AGPL-3.0
-  vs README "Proprietary") — pending reconciliation.
+- Current first-party license declarations use Apache-2.0 consistently across
+  LICENSE/NOTICE, the pom, source headers, Checkstyle template and README.
