@@ -1,5 +1,5 @@
 profile: qbit
-orb_version: 0.7.12
+orb_version: 0.7.16
 default_branch: main
 java_version: '21'
 browsers: true
@@ -7,7 +7,7 @@ api_checks: false
 docs_only: false
 release_on_main: false
 release_tag_policy: v-prefix
-test_branch_policy: feature
+test_branch_policy: all
 publish:
   snapshot: true
   release_candidate: true
