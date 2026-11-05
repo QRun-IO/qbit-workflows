@@ -100,8 +100,10 @@
       </dependency>
       <dependency>
          <groupId>com.kingsrook.qqq</groupId>
+         <!-- 0.27.0-RC.1 references com.kingsrook.qqq.backend.javalin.QJavalinMetaData, which QQQ 4.x moved to com.kingsrook.qqq.middleware.javalin
+              (NoClassDefFoundError when the form adjusters register). 0.42.0-RC.2 is the published line for 4.x; its public API is a superset. -->
          <artifactId>qqq-frontend-material-dashboard</artifactId>
-         <version>0.27.0-RC.1</version>
+         <version>0.42.0-RC.2</version>
       </dependency>
 
       <dependency>
